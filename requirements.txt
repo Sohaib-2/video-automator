@@ -1,0 +1,17 @@
+# UI Framework
+PyQt5>=5.15.0
+
+# Video Processing
+openai-whisper>=20231117
+moviepy>=1.0.3
+
+# Audio/Video Tools
+ffmpeg-python>=0.2.0
+
+# Additional dependencies (usually installed with above)
+numpy>=1.24.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Optional but recommended for better performance
+# numba>=0.57.0  # Speeds up some operations
