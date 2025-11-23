@@ -240,45 +240,91 @@ class VideoProcessor:
         return float(result.stdout.strip())
     
     def create_subtitle_style(self) -> str:
-        """Create FFmpeg subtitle style from settings"""
+        """
+        Create FFmpeg subtitle style from settings with custom position
+        FIXED: Now uses caption_position from settings instead of fixed alignment
+        """
         settings = self.settings
         
         font = settings['font'].replace(' ', '')
         font_size = settings['font_size']
         text_color = self._hex_to_bgr(settings['text_color'])
         bg_color = self._hex_to_bgr(settings['bg_color'])
-        bg_opacity = int(settings['bg_opacity'] * 2.55)
         
-        position_map = {
-            'Top Center': 8,
-            'Middle Center': 5,
-            'Bottom Center': 2
-        }
-        alignment = position_map.get(settings['position'], 2)
+        # FIXED: Properly use background opacity
+        has_background = settings.get('has_background', True)
+        if has_background:
+            # Convert 0-100 to 0-255, then invert for alpha (0=transparent, 255=opaque)
+            bg_opacity_value = int(settings['bg_opacity'] * 2.55)
+            bg_alpha = f"{bg_opacity_value:02X}"
+        else:
+            # No background = fully transparent
+            bg_alpha = "00"
+        
+        # Update bg_color to include alpha
+        bg_color_with_alpha = f"{bg_color[:-2]}{bg_alpha}"
+        
+        # FIXED: Get custom caption position from settings
+        caption_pos = settings.get('caption_position', {'x': 0.5, 'y': 0.9})
+        
+        x_norm = caption_pos['x']
+        y_norm = caption_pos['y']
+        
+        # FIXED: Calculate pixel positions for 1920x1080 frame
+        # MarginV is distance from BOTTOM of screen
+        margin_v = int((1.0 - y_norm) * 1080)
+        
+        # Determine alignment based on horizontal position
+        if x_norm < 0.33:
+            alignment = 1  # Bottom left
+            margin_l = int(x_norm * 1920)
+            margin_r = 0
+        elif x_norm > 0.66:
+            alignment = 3  # Bottom right
+            margin_l = 0
+            margin_r = int((1.0 - x_norm) * 1920)
+        else:
+            alignment = 2  # Bottom center
+            margin_l = 0
+            margin_r = 0
+        
+        # FIXED: Adjust alignment for vertical position
+        if y_norm < 0.33:
+            # Top row
+            alignment += 6  # 1→7, 2→8, 3→9
+        elif y_norm < 0.66:
+            # Middle row
+            alignment += 3  # 1→4, 2→5, 3→6
+        # else: bottom row (no change needed)
         
         style = (
             f"FontName={font},"
             f"FontSize={font_size},"
             f"PrimaryColour={text_color},"
-            f"BackColour={bg_color},"
-            f"BorderStyle=4,"
+            f"BackColour={bg_color_with_alpha},"
+            f"BorderStyle=4,"  # Background box
             f"Outline=0,"
             f"Shadow=0,"
-            f"MarginV=50,"
+            f"MarginV={margin_v},"
+            f"MarginL={margin_l},"
+            f"MarginR={margin_r},"
             f"Alignment={alignment}"
         )
+        
+        logger.info(f"Caption style: Position=({x_norm:.2f}, {y_norm:.2f}), Alignment={alignment}, MarginV={margin_v}, HasBG={has_background}, Opacity={settings.get('bg_opacity', 80)}%")
         
         return style
     
     def _hex_to_bgr(self, hex_color: str) -> str:
-        """Convert hex color to FFmpeg BGR format with alpha"""
+        """Convert hex color to FFmpeg BGR format with alpha placeholder"""
         hex_color = hex_color.lstrip('#')
         
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
         
-        return f"&H00{b:02X}{g:02X}{r:02X}"
+        # Return with FF alpha (will be replaced in create_subtitle_style)
+        return f"&HFF{b:02X}{g:02X}{r:02X}"
     
     def assemble_video(
         self,
@@ -476,7 +522,7 @@ class VideoProcessor:
         images = files['images']
         num_images = len(images)
         
-        # Get subtitle style
+        # Get subtitle style with FIXED position
         subtitle_style = self.create_subtitle_style()
         
         # Get motion effect
@@ -519,7 +565,7 @@ class VideoProcessor:
         concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
         filter_parts.append(concat_filter)
         
-        # Add subtitles
+        # Add subtitles with FIXED positioning
         srt_path_escaped = srt_path.replace('\\', '/').replace(':', r'\:')
         subtitle_filter = f"[vconcat]subtitles={srt_path_escaped}:force_style='{subtitle_style}'[vout]"
         filter_parts.append(subtitle_filter)

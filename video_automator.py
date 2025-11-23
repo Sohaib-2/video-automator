@@ -7,8 +7,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QGridLayout, QSpinBox, QFileDialog, QListWidgetItem,
                              QFrame, QMessageBox, QGraphicsView, QGraphicsScene,
                              QGraphicsPixmapItem, QGraphicsRectItem, QSlider,
-                             QGraphicsTextItem)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRectF, QTimer, QPointF
+                             QGraphicsTextItem, QCheckBox, QGroupBox, QLineEdit)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRectF, QTimer, QPointF, QSize
 from PyQt5.QtGui import (QFont, QColor, QPalette, QPixmap, QPen, QBrush, 
                          QPainter, QTransform, QImage)
 
@@ -35,17 +35,17 @@ class DraggableCaptionItem(QGraphicsTextItem):
 
 
 class ImageCropView(QGraphicsView):
-    """Interactive image crop/zoom view for 16:9 ratio"""
+    """Interactive image crop/zoom view for 16:9 ratio with draggable image"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
         
-        # Setup view
+        # Setup view - FIXED: Remove ScrollHandDrag to allow image dragging
         self.setRenderHint(QPainter.Antialiasing)
         self.setRenderHint(QPainter.SmoothPixmapTransform)
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setDragMode(QGraphicsView.NoDrag)  # FIXED: Don't drag view
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         
@@ -53,19 +53,27 @@ class ImageCropView(QGraphicsView):
         self.image_item = None
         self.original_pixmap = None
         
-        # 16:9 crop frame (1920x1080)
+        # 16:9 crop frame (1920x1080) - center of scene
         self.crop_frame = QGraphicsRectItem(0, 0, 1920, 1080)
-        self.crop_frame.setPen(QPen(QColor(255, 0, 0, 200), 3, Qt.SolidLine))
+        self.crop_frame.setPen(QPen(QColor(255, 0, 0, 200), 4, Qt.SolidLine))
         self.crop_frame.setBrush(QBrush(Qt.transparent))
+        self.crop_frame.setZValue(100)  # Always on top
         self.scene.addItem(self.crop_frame)
         
         # Zoom level
         self.zoom_level = 1.0
-        self.min_zoom = 0.5
-        self.max_zoom = 3.0
+        self.min_zoom = 0.3
+        self.max_zoom = 5.0
         
         # Caption overlay
         self.caption_item = None
+        
+    def resizeEvent(self, event):
+        """Maintain 16:9 aspect ratio on resize"""
+        super().resizeEvent(event)
+        # FIXED: Always fit to show entire crop frame in 16:9
+        if self.crop_frame:
+            self.fitInView(self.crop_frame, Qt.KeepAspectRatio)
         
     def load_image(self, image_path: str):
         """Load image into view"""
@@ -78,10 +86,15 @@ class ImageCropView(QGraphicsView):
         self.scene.addItem(self.image_item)
         self.image_item.setZValue(-1)  # Behind crop frame
         
-        # Center image
+        # FIXED: Make image draggable!
+        self.image_item.setFlag(QGraphicsPixmapItem.ItemIsMovable, True)
+        self.image_item.setFlag(QGraphicsPixmapItem.ItemIsSelectable, True)
+        self.image_item.setCursor(Qt.OpenHandCursor)
+        
+        # Center image under crop frame
         self.center_image()
         
-        # Fit view to show crop frame
+        # FIXED: Fit view to show crop frame properly
         self.fitInView(self.crop_frame, Qt.KeepAspectRatio)
         
     def center_image(self):
@@ -91,19 +104,48 @@ class ImageCropView(QGraphicsView):
             crop_rect = self.crop_frame.rect()
             
             # Center position
-            x = crop_rect.center().x() - img_rect.width() / 2
-            y = crop_rect.center().y() - img_rect.height() / 2
+            x = crop_rect.center().x() - (img_rect.width() * self.zoom_level) / 2
+            y = crop_rect.center().y() - (img_rect.height() * self.zoom_level) / 2
             
             self.image_item.setPos(x, y)
     
     def set_zoom(self, zoom: float):
         """Set zoom level"""
+        old_zoom = self.zoom_level
         self.zoom_level = max(self.min_zoom, min(self.max_zoom, zoom))
         
         if self.image_item:
+            # Get current center position
+            img_center_x = self.image_item.x() + (self.image_item.boundingRect().width() * old_zoom) / 2
+            img_center_y = self.image_item.y() + (self.image_item.boundingRect().height() * old_zoom) / 2
+            
             # Scale image
-            scale = self.zoom_level
-            self.image_item.setScale(scale)
+            self.image_item.setScale(self.zoom_level)
+            
+            # Recenter around same point
+            new_x = img_center_x - (self.image_item.boundingRect().width() * self.zoom_level) / 2
+            new_y = img_center_y - (self.image_item.boundingRect().height() * self.zoom_level) / 2
+            self.image_item.setPos(new_x, new_y)
+    
+    def zoom_in(self):
+        """Zoom in by 10%"""
+        new_zoom = self.zoom_level * 1.1
+        self.set_zoom(new_zoom)
+        return self.zoom_level
+    
+    def zoom_out(self):
+        """Zoom out by 10%"""
+        new_zoom = self.zoom_level / 1.1
+        self.set_zoom(new_zoom)
+        return self.zoom_level
+    
+    def reset_view(self):
+        """Reset zoom and center image"""
+        self.zoom_level = 1.0
+        if self.image_item:
+            self.image_item.setScale(1.0)
+            self.center_image()
+        return self.zoom_level
             
     def get_crop_region(self):
         """Get the crop region in original image coordinates"""
@@ -130,7 +172,7 @@ class ImageCropView(QGraphicsView):
             'height': int(h)
         }
     
-    def add_caption(self, text: str, font: QFont, color: QColor, bg_color: QColor, bg_opacity: int):
+    def add_caption(self, text: str, font: QFont, color: QColor, bg_color: QColor, bg_opacity: int, has_background: bool):
         """Add draggable caption to preview"""
         if self.caption_item:
             self.scene.removeItem(self.caption_item)
@@ -139,39 +181,58 @@ class ImageCropView(QGraphicsView):
         self.caption_item.setFont(font)
         self.caption_item.setDefaultTextColor(color)
         
-        # Add background
-        # Create HTML with background
-        html = f"""
-        <div style='background-color: rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, {bg_opacity/100.0});
-                    padding: 10px; border-radius: 5px;'>
-            <span style='color: {color.name()}; font-family: {font.family()}; font-size: {font.pointSize()}pt;'>
+        # FIXED: Support no background option
+        if has_background:
+            # Create HTML with background
+            html = f"""
+            <div style='background-color: rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, {bg_opacity/100.0});
+                        padding: 10px; border-radius: 5px;'>
+                <span style='color: {color.name()}; font-family: {font.family()}; font-size: {font.pointSize()}pt; font-weight: bold;'>
+                    {text}
+                </span>
+            </div>
+            """
+        else:
+            # No background - text with shadow
+            html = f"""
+            <span style='color: {color.name()}; font-family: {font.family()}; font-size: {font.pointSize()}pt; font-weight: bold;
+                         text-shadow: 2px 2px 4px rgba(0,0,0,0.8);'>
                 {text}
             </span>
-        </div>
-        """
+            """
+        
         self.caption_item.setHtml(html)
         
         self.scene.addItem(self.caption_item)
-        self.caption_item.setZValue(10)  # On top
+        self.caption_item.setZValue(200)  # On top of everything
         
-        # Position at bottom center
+        # Position at bottom center by default
         caption_rect = self.caption_item.boundingRect()
         crop_rect = self.crop_frame.rect()
         x = crop_rect.center().x() - caption_rect.width() / 2
-        y = crop_rect.bottom() - caption_rect.height() - 50
+        y = crop_rect.bottom() - caption_rect.height() - 80
         self.caption_item.setPos(x, y)
     
     def get_caption_position(self):
         """Get caption position relative to crop frame (normalized 0-1)"""
         if not self.caption_item:
-            return {'x': 0.5, 'y': 0.85}  # Default bottom center
+            return {'x': 0.5, 'y': 0.9}  # Default bottom center
         
         caption_pos = self.caption_item.pos()
+        caption_rect = self.caption_item.boundingRect()
         crop_rect = self.crop_frame.rect()
         
+        # Get center point of caption
+        caption_center_x = caption_pos.x() + caption_rect.width() / 2
+        caption_center_y = caption_pos.y() + caption_rect.height() / 2
+        
         # Normalize to 0-1 range
-        x = (caption_pos.x() - crop_rect.x()) / crop_rect.width()
-        y = (caption_pos.y() - crop_rect.y()) / crop_rect.height()
+        x = (caption_center_x - crop_rect.x()) / crop_rect.width()
+        y = (caption_center_y - crop_rect.y()) / crop_rect.height()
+        
+        # Clamp to valid range
+        x = max(0.0, min(1.0, x))
+        y = max(0.0, min(1.0, y))
         
         return {'x': x, 'y': y}
     
@@ -242,7 +303,6 @@ class MotionEffectPreview(QLabel):
         elif self.effect_name == "Ken Burns":
             scale = 1.0 + progress * 0.3
             pixmap = self._apply_zoom(self.preview_pixmap, scale)
-            # Could add pan here too
         else:  # Static
             pixmap = self.preview_pixmap
         
@@ -287,7 +347,7 @@ class MotionEffectPreview(QLabel):
         """Set selection state"""
         self.is_selected = selected
         if selected:
-            self.setStyleSheet("border: 3px solid #4CAF50; background-color: #f0f0f0;")
+            self.setStyleSheet("border: 3px solid #4CAF50; background-color: #e8f5e9;")
             self.start_animation()
         else:
             self.setStyleSheet("border: 2px solid #ccc; background-color: #f0f0f0;")
@@ -302,18 +362,20 @@ class EnhancedSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Video Settings - Setup & Preview")
         self.setModal(True)
-        self.resize(1200, 800)
+        self.resize(1400, 850)
         
         # Default settings
         self.settings = current_settings or {
-            'font': 'Arial',
+            'font': 'Arial Bold',
             'font_size': 48,
-            'text_color': '#FFFFFF',
+            'text_color': '#FFFF00',
             'bg_color': '#000000',
             'bg_opacity': 80,
+            'has_background': True,  # NEW
             'position': 'Bottom Center',
-            'motion_effect': 'Zoom In',  # NEW
-            'crop_settings': None  # NEW
+            'motion_effect': 'Zoom In',
+            'crop_settings': None,
+            'caption_position': {'x': 0.5, 'y': 0.9}
         }
         
         self.sample_folder = sample_folder
@@ -340,36 +402,112 @@ class EnhancedSettingsDialog(QDialog):
         left_panel = QVBoxLayout()
         left_panel.setSpacing(10)
         
-        preview_label = QLabel("Live Preview - 16:9 Video Output")
+        preview_label = QLabel("📺 Live Preview - 16:9 Video Output")
         preview_label.setFont(QFont('Arial', 14, QFont.Bold))
+        preview_label.setStyleSheet("color: #1976D2; padding: 5px;")
         left_panel.addWidget(preview_label)
         
         # Image crop view
         self.crop_view = ImageCropView()
-        self.crop_view.setMinimumSize(640, 360)
-        left_panel.addWidget(self.crop_view, stretch=3)
+        self.crop_view.setMinimumSize(800, 450)  # 16:9 ratio
+        self.crop_view.setStyleSheet("border: 2px solid #ddd; background-color: #fafafa;")
+        left_panel.addWidget(self.crop_view, stretch=4)
         
-        # Zoom slider
-        zoom_layout = QHBoxLayout()
-        zoom_layout.addWidget(QLabel("Zoom:"))
-        self.zoom_slider = QSlider(Qt.Horizontal)
-        self.zoom_slider.setRange(50, 300)  # 0.5x to 3.0x
-        self.zoom_slider.setValue(100)
-        self.zoom_slider.valueChanged.connect(self.on_zoom_changed)
-        zoom_layout.addWidget(self.zoom_slider)
+        # Zoom controls with +/- buttons
+        zoom_group = QGroupBox("🔍 Zoom & Position Controls")
+        zoom_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        zoom_layout = QVBoxLayout()
+        
+        zoom_buttons_layout = QHBoxLayout()
+        zoom_buttons_layout.addWidget(QLabel("Zoom:"))
+        
+        self.zoom_out_btn = QPushButton("➖")
+        self.zoom_out_btn.setFixedSize(50, 50)
+        self.zoom_out_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 24px;
+                font-weight: bold;
+                background-color: #f44336;
+                color: white;
+                border-radius: 25px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+            QPushButton:pressed {
+                background-color: #b71c1c;
+            }
+        """)
+        self.zoom_out_btn.clicked.connect(self.on_zoom_out)
+        zoom_buttons_layout.addWidget(self.zoom_out_btn)
+        
         self.zoom_label = QLabel("1.0x")
-        zoom_layout.addWidget(self.zoom_label)
-        left_panel.addLayout(zoom_layout)
+        self.zoom_label.setMinimumWidth(80)
+        self.zoom_label.setAlignment(Qt.AlignCenter)
+        self.zoom_label.setStyleSheet("font-weight: bold; font-size: 18px; color: #1976D2;")
+        zoom_buttons_layout.addWidget(self.zoom_label)
+        
+        self.zoom_in_btn = QPushButton("➕")
+        self.zoom_in_btn.setFixedSize(50, 50)
+        self.zoom_in_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 24px;
+                font-weight: bold;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 25px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #388E3C;
+            }
+        """)
+        self.zoom_in_btn.clicked.connect(self.on_zoom_in)
+        zoom_buttons_layout.addWidget(self.zoom_in_btn)
+        
+        # Reset button
+        reset_btn = QPushButton("🔄 Reset")
+        reset_btn.setFixedSize(80, 50)
+        reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+        """)
+        reset_btn.clicked.connect(self.on_reset_view)
+        zoom_buttons_layout.addWidget(reset_btn)
+        
+        zoom_buttons_layout.addStretch()
+        zoom_layout.addLayout(zoom_buttons_layout)
         
         # Instructions
-        instructions = QLabel("Drag image to position | Scroll to zoom | Drag caption to reposition")
-        instructions.setStyleSheet("color: #666; font-style: italic; padding: 5px;")
+        instructions = QLabel(
+            "💡 <b>How to use:</b><br>"
+            "• Drag the <b>image</b> to reposition it<br>"
+            "• Use <b>+/- buttons</b> or <b>mouse wheel</b> to zoom<br>"
+            "• Drag the <b>caption</b> to change its position<br>"
+            "• Red frame shows final 16:9 video output"
+        )
+        instructions.setStyleSheet("color: #666; font-size: 11px; padding: 8px; background-color: #fffde7; border-radius: 5px;")
         instructions.setWordWrap(True)
-        left_panel.addWidget(instructions)
+        zoom_layout.addWidget(instructions)
+        
+        zoom_group.setLayout(zoom_layout)
+        left_panel.addWidget(zoom_group)
         
         # Motion effects
-        effects_label = QLabel("Motion Effects")
+        effects_label = QLabel("🎬 Motion Effects")
         effects_label.setFont(QFont('Arial', 12, QFont.Bold))
+        effects_label.setStyleSheet("color: #1976D2;")
         left_panel.addWidget(effects_label)
         
         self.effect_previews = {}
@@ -385,7 +523,7 @@ class EnhancedSettingsDialog(QDialog):
             container.addWidget(preview)
             label = QLabel(effect)
             label.setAlignment(Qt.AlignCenter)
-            label.setFont(QFont('Arial', 9))
+            label.setFont(QFont('Arial', 9, QFont.Bold))
             container.addWidget(label)
             
             effects_layout.addLayout(container)
@@ -396,88 +534,148 @@ class EnhancedSettingsDialog(QDialog):
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
         
-        settings_title = QLabel("Caption Settings")
+        settings_title = QLabel("⚙️ Caption Settings")
         settings_title.setFont(QFont('Arial', 14, QFont.Bold))
+        settings_title.setStyleSheet("color: #1976D2; padding: 5px;")
         right_panel.addWidget(settings_title)
         
         # Settings grid
         grid = QGridLayout()
         grid.setSpacing(15)
         
+        row = 0
+        
         # Font
-        grid.addWidget(QLabel("Font:"), 0, 0)
+        grid.addWidget(QLabel("Font:"), row, 0)
         self.font_combo = QComboBox()
         fonts = ['Arial', 'Arial Bold', 'Helvetica', 'Roboto', 'Montserrat', 
                  'Open Sans', 'Lato', 'Poppins', 'Oswald', 'Raleway']
         self.font_combo.addItems(fonts)
         self.font_combo.setCurrentText(self.settings['font'])
         self.font_combo.currentTextChanged.connect(self.update_preview)
-        grid.addWidget(self.font_combo, 0, 1)
+        grid.addWidget(self.font_combo, row, 1)
+        row += 1
         
         # Font size
-        grid.addWidget(QLabel("Font Size:"), 1, 0)
+        grid.addWidget(QLabel("Font Size:"), row, 0)
         self.font_size_spin = QSpinBox()
-        self.font_size_spin.setRange(20, 100)
+        self.font_size_spin.setRange(20, 120)
         self.font_size_spin.setValue(self.settings['font_size'])
         self.font_size_spin.setSuffix(" px")
         self.font_size_spin.valueChanged.connect(self.update_preview)
-        grid.addWidget(self.font_size_spin, 1, 1)
+        grid.addWidget(self.font_size_spin, row, 1)
+        row += 1
         
         # Text color
-        grid.addWidget(QLabel("Text Color:"), 2, 0)
+        grid.addWidget(QLabel("Text Color:"), row, 0)
         self.text_color_btn = QPushButton(self.settings['text_color'])
-        self.text_color_btn.setStyleSheet(f"background-color: {self.settings['text_color']}; color: white;")
+        self.text_color_btn.setStyleSheet(f"background-color: {self.settings['text_color']}; color: white; font-weight: bold;")
         self.text_color_btn.clicked.connect(self.choose_text_color)
-        grid.addWidget(self.text_color_btn, 2, 1)
+        grid.addWidget(self.text_color_btn, row, 1)
+        row += 1
         
         # Text color presets
+        grid.addWidget(QLabel("Presets:"), row, 0)
         text_preset_layout = QHBoxLayout()
         text_colors = [('#FFFFFF', 'White'), ('#000000', 'Black'), ('#FF0000', 'Red'), 
                       ('#0000FF', 'Blue'), ('#FFFF00', 'Yellow'), ('#00FF00', 'Green')]
         for color, name in text_colors:
             btn = QPushButton()
-            btn.setFixedSize(30, 30)
-            btn.setStyleSheet(f"background-color: {color}; border: 1px solid #ccc;")
+            btn.setFixedSize(35, 35)
+            btn.setToolTip(name)
+            btn.setStyleSheet(f"background-color: {color}; border: 2px solid #999; border-radius: 3px;")
             btn.clicked.connect(lambda checked, c=color: self.set_text_color(c))
             text_preset_layout.addWidget(btn)
-        grid.addLayout(text_preset_layout, 3, 1)
+        text_preset_layout.addStretch()
+        grid.addLayout(text_preset_layout, row, 1)
+        row += 1
+        
+        # FIXED: Add "Use Background" checkbox
+        grid.addWidget(QLabel("Background:"), row, 0)
+        self.has_bg_checkbox = QCheckBox("Enable Background")
+        self.has_bg_checkbox.setChecked(self.settings.get('has_background', True))
+        self.has_bg_checkbox.stateChanged.connect(self.on_bg_toggle)
+        grid.addWidget(self.has_bg_checkbox, row, 1)
+        row += 1
         
         # Background color
-        grid.addWidget(QLabel("Background Color:"), 4, 0)
+        grid.addWidget(QLabel("BG Color:"), row, 0)
         self.bg_color_btn = QPushButton(self.settings['bg_color'])
-        self.bg_color_btn.setStyleSheet(f"background-color: {self.settings['bg_color']}; color: white;")
+        self.bg_color_btn.setStyleSheet(f"background-color: {self.settings['bg_color']}; color: white; font-weight: bold;")
         self.bg_color_btn.clicked.connect(self.choose_bg_color)
-        grid.addWidget(self.bg_color_btn, 4, 1)
+        self.bg_color_btn.setEnabled(self.settings.get('has_background', True))
+        grid.addWidget(self.bg_color_btn, row, 1)
+        row += 1
         
         # Background opacity
-        grid.addWidget(QLabel("Background Opacity:"), 5, 0)
+        grid.addWidget(QLabel("BG Opacity:"), row, 0)
+        opacity_layout = QHBoxLayout()
         self.opacity_spin = QSpinBox()
         self.opacity_spin.setRange(0, 100)
         self.opacity_spin.setValue(self.settings['bg_opacity'])
         self.opacity_spin.setSuffix(" %")
         self.opacity_spin.valueChanged.connect(self.update_preview)
-        grid.addWidget(self.opacity_spin, 5, 1)
+        self.opacity_spin.setEnabled(self.settings.get('has_background', True))
+        opacity_layout.addWidget(self.opacity_spin)
+        grid.addLayout(opacity_layout, row, 1)
+        row += 1
         
         right_panel.addLayout(grid)
+        
+        # Preview sample text input
+        sample_group = QGroupBox("📝 Preview Text")
+        sample_layout = QVBoxLayout()
+        self.sample_text_input = QLineEdit("Sample Caption Text")
+        self.sample_text_input.textChanged.connect(self.update_preview)
+        self.sample_text_input.setPlaceholderText("Type preview text here...")
+        sample_layout.addWidget(self.sample_text_input)
+        sample_group.setLayout(sample_layout)
+        right_panel.addWidget(sample_group)
+        
         right_panel.addStretch()
         
         # Buttons
         button_layout = QHBoxLayout()
-        save_btn = QPushButton("Save Settings")
+        save_btn = QPushButton("✅ Save Settings")
         save_btn.clicked.connect(self.save_and_close)
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton("❌ Cancel")
         cancel_btn.clicked.connect(self.reject)
         
-        save_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 12px; font-weight: bold; font-size: 14px;")
-        cancel_btn.setStyleSheet("background-color: #f44336; color: white; padding: 12px; font-size: 14px;")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 15px;
+                font-weight: bold;
+                font-size: 14px;
+                border-radius: 5px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 15px;
+                font-size: 14px;
+                border-radius: 5px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
         
         button_layout.addWidget(save_btn)
         button_layout.addWidget(cancel_btn)
         right_panel.addLayout(button_layout)
         
         # Add panels to main layout
-        layout.addLayout(left_panel, stretch=2)
-        layout.addLayout(right_panel, stretch=1)
+        layout.addLayout(left_panel, stretch=3)
+        layout.addLayout(right_panel, stretch=2)
         
         self.setLayout(layout)
     
@@ -498,11 +696,28 @@ class EnhancedSettingsDialog(QDialog):
             # Update caption preview
             self.update_preview()
     
-    def on_zoom_changed(self, value):
-        """Handle zoom slider change"""
-        zoom = value / 100.0
+    def on_zoom_in(self):
+        """Handle zoom in button"""
+        zoom = self.crop_view.zoom_in()
         self.zoom_label.setText(f"{zoom:.1f}x")
-        self.crop_view.set_zoom(zoom)
+    
+    def on_zoom_out(self):
+        """Handle zoom out button"""
+        zoom = self.crop_view.zoom_out()
+        self.zoom_label.setText(f"{zoom:.1f}x")
+    
+    def on_reset_view(self):
+        """Reset view to default"""
+        zoom = self.crop_view.reset_view()
+        self.zoom_label.setText(f"{zoom:.1f}x")
+    
+    def on_bg_toggle(self):
+        """Handle background toggle"""
+        has_bg = self.has_bg_checkbox.isChecked()
+        self.bg_color_btn.setEnabled(has_bg)
+        self.opacity_spin.setEnabled(has_bg)
+        self.settings['has_background'] = has_bg
+        self.update_preview()
     
     def select_effect(self, effect_name: str):
         """Select motion effect"""
@@ -518,13 +733,18 @@ class EnhancedSettingsDialog(QDialog):
         text_color = QColor(self.settings['text_color'])
         bg_color = QColor(self.settings['bg_color'])
         bg_opacity = self.opacity_spin.value()
+        has_bg = self.has_bg_checkbox.isChecked()
+        
+        # Get sample text
+        sample_text = self.sample_text_input.text() or "Sample Caption Text"
         
         self.crop_view.add_caption(
-            "Sample Caption Text",
+            sample_text,
             font,
             text_color,
             bg_color,
-            bg_opacity
+            bg_opacity,
+            has_bg
         )
     
     def choose_text_color(self):
@@ -535,7 +755,7 @@ class EnhancedSettingsDialog(QDialog):
     def set_text_color(self, color):
         self.settings['text_color'] = color
         self.text_color_btn.setText(color)
-        self.text_color_btn.setStyleSheet(f"background-color: {color}; color: white;")
+        self.text_color_btn.setStyleSheet(f"background-color: {color}; color: white; font-weight: bold;")
         self.update_preview()
     
     def choose_bg_color(self):
@@ -543,7 +763,7 @@ class EnhancedSettingsDialog(QDialog):
         if color.isValid():
             self.settings['bg_color'] = color.name()
             self.bg_color_btn.setText(color.name())
-            self.bg_color_btn.setStyleSheet(f"background-color: {color.name()}; color: white;")
+            self.bg_color_btn.setStyleSheet(f"background-color: {color.name()}; color: white; font-weight: bold;")
             self.update_preview()
     
     def save_and_close(self):
@@ -556,6 +776,7 @@ class EnhancedSettingsDialog(QDialog):
             'font': self.font_combo.currentText(),
             'font_size': self.font_size_spin.value(),
             'bg_opacity': self.opacity_spin.value(),
+            'has_background': self.has_bg_checkbox.isChecked(),
             'crop_settings': crop_region,
             'caption_position': caption_pos
         })
@@ -578,10 +799,10 @@ class VideoListItem(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(8, 8, 8, 8)
         
         # Folder name with image count
-        name_label = QLabel(f"[Folder] {self.folder_name} ({self.num_images} image{'s' if self.num_images != 1 else ''})")
+        name_label = QLabel(f"📁 {self.folder_name} ({self.num_images} image{'s' if self.num_images != 1 else ''})")
         name_label.setFont(QFont('Arial', 11, QFont.Bold))
         layout.addWidget(name_label)
         
@@ -591,27 +812,59 @@ class VideoListItem(QWidget):
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #ccc;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #f0f0f0;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
         layout.addWidget(self.progress_bar)
         
         # Status label
-        self.status_label = QLabel("Queued")
-        self.status_label.setStyleSheet("color: #666;")
+        self.status_label = QLabel("⏳ Queued")
+        self.status_label.setStyleSheet("color: #666; font-size: 10px;")
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
     
     def update_progress(self, value, status="Processing..."):
         self.progress_bar.setValue(value)
-        self.status_label.setText(status)
+        self.status_label.setText(f"⚙️ {status}")
     
     def set_complete(self):
         self.progress_bar.setValue(100)
-        self.status_label.setText("[OK] Complete")
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #4CAF50;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #e8f5e9;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        self.status_label.setText("✅ Complete!")
         self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
     
     def set_error(self, error_msg="Error"):
         self.progress_bar.setValue(0)
-        self.status_label.setText(f"[X] {error_msg}")
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #f44336;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #ffebee;
+            }
+        """)
+        self.status_label.setText(f"❌ {error_msg}")
         self.status_label.setStyleSheet("color: #f44336; font-weight: bold;")
 
 
@@ -661,8 +914,8 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Video Automator - Batch Video Editor")
-        self.setGeometry(100, 100, 900, 700)
+        self.setWindowTitle("🎬 Video Automator - Batch Video Editor")
+        self.setGeometry(100, 100, 1000, 750)
         
         # Enable drag and drop
         self.setAcceptDrops(True)
@@ -692,12 +945,13 @@ class MainWindow(QMainWindow):
     def show_first_time_setup(self):
         """Show first-time setup wizard"""
         msg = QMessageBox()
-        msg.setWindowTitle("Welcome to Video Automator!")
+        msg.setWindowTitle("🎉 Welcome to Video Automator!")
         msg.setIcon(QMessageBox.Information)
         msg.setText(
-            "Welcome! Let's set up your video settings.\n\n"
-            "First, add a sample video project folder (with audio + images)\n"
-            "so you can preview and configure your captions and effects."
+            "<h3>Welcome to Video Automator!</h3>"
+            "<p>Let's configure your video settings.</p>"
+            "<p>First, select a <b>sample video project folder</b> (with audio + images)<br>"
+            "so you can preview and configure your captions and effects.</p>"
         )
         msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
         
@@ -726,7 +980,7 @@ class MainWindow(QMainWindow):
         if not check_ffmpeg_installed():
             QMessageBox.warning(
                 self,
-                "FFmpeg Not Found",
+                "⚠️ FFmpeg Not Found",
                 "FFmpeg is not installed or not in PATH.\n\n"
                 "Please install FFmpeg to use this application.\n"
                 "Visit: https://ffmpeg.org/download.html"
@@ -734,30 +988,37 @@ class MainWindow(QMainWindow):
         
         gpu_available = check_gpu_available()
         if gpu_available:
-            print("[OK] NVIDIA GPU detected - will use hardware acceleration")
+            print("✅ NVIDIA GPU detected - will use hardware acceleration")
         else:
-            print("ℹ No NVIDIA GPU detected - will use CPU encoding")
+            print("ℹ️  No NVIDIA GPU detected - will use CPU encoding")
     
     def load_settings(self):
         """Load settings from config file"""
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r') as f:
-                    return json.load(f)
+                    settings = json.load(f)
+                    # Add new keys if missing
+                    if 'has_background' not in settings:
+                        settings['has_background'] = True
+                    if 'caption_position' not in settings:
+                        settings['caption_position'] = {'x': 0.5, 'y': 0.9}
+                    return settings
             except:
                 pass
         
         # Default settings
         return {
-            'font': 'Arial',
+            'font': 'Arial Bold',
             'font_size': 48,
-            'text_color': '#FFFFFF',
+            'text_color': '#FFFF00',
             'bg_color': '#000000',
             'bg_opacity': 80,
+            'has_background': True,
             'position': 'Bottom Center',
             'motion_effect': 'Zoom In',
             'crop_settings': None,
-            'caption_position': {'x': 0.5, 'y': 0.85}
+            'caption_position': {'x': 0.5, 'y': 0.9}
         }
     
     def save_settings(self):
@@ -776,21 +1037,22 @@ class MainWindow(QMainWindow):
         # Header
         header_layout = QHBoxLayout()
         
-        title = QLabel("Video Automator")
-        title.setFont(QFont('Arial', 24, QFont.Bold))
+        title = QLabel("🎬 Video Automator")
+        title.setFont(QFont('Arial', 28, QFont.Bold))
+        title.setStyleSheet("color: #1976D2;")
         header_layout.addWidget(title)
         
         header_layout.addStretch()
         
         # Settings button
-        settings_btn = QPushButton("Settings")
-        settings_btn.setFixedSize(120, 40)
+        settings_btn = QPushButton("⚙️ Settings")
+        settings_btn.setFixedSize(140, 45)
         settings_btn.setStyleSheet("""
             QPushButton {
                 background-color: #2196F3;
                 color: white;
                 border: none;
-                border-radius: 5px;
+                border-radius: 8px;
                 font-size: 14px;
                 font-weight: bold;
             }
@@ -806,48 +1068,56 @@ class MainWindow(QMainWindow):
         # Separator
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
-        line.setStyleSheet("background-color: #ccc;")
+        line.setStyleSheet("background-color: #ddd; max-height: 2px;")
         main_layout.addWidget(line)
         
         # Add folders section
-        add_section = QLabel("Add Video Folders")
-        add_section.setFont(QFont('Arial', 14, QFont.Bold))
+        add_section = QLabel("📂 Add Video Folders")
+        add_section.setFont(QFont('Arial', 16, QFont.Bold))
+        add_section.setStyleSheet("color: #1976D2;")
         main_layout.addWidget(add_section)
         
-        info_label = QLabel("Drag & drop folders here, or click button below - Each folder: voiceover audio + at least 1 image")
-        info_label.setStyleSheet("color: #666; font-style: italic;")
+        info_label = QLabel("💡 Drag & drop folders here, or click button below • Each folder needs: voiceover audio + at least 1 image")
+        info_label.setStyleSheet("color: #666; font-style: italic; font-size: 12px;")
+        info_label.setWordWrap(True)
         main_layout.addWidget(info_label)
         
         # Add folder button
-        add_folder_btn = QPushButton("Add Folders (or drag & drop)")
-        add_folder_btn.setFixedHeight(60)
+        add_folder_btn = QPushButton("➕ Add Folders (or drag & drop)")
+        add_folder_btn.setFixedHeight(70)
         add_folder_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
                 color: white;
-                border: 2px dashed #45a049;
-                border-radius: 10px;
-                font-size: 16px;
+                border: 3px dashed #45a049;
+                border-radius: 12px;
+                font-size: 18px;
                 font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #45a049;
+                border: 3px dashed #388E3C;
             }
         """)
         add_folder_btn.clicked.connect(self.add_folders)
         main_layout.addWidget(add_folder_btn)
         
         # Queue section
-        queue_label = QLabel("Video Queue")
-        queue_label.setFont(QFont('Arial', 14, QFont.Bold))
+        queue_label = QLabel("📋 Video Queue")
+        queue_label.setFont(QFont('Arial', 16, QFont.Bold))
+        queue_label.setStyleSheet("color: #1976D2;")
         main_layout.addWidget(queue_label)
         
         self.queue_list = QListWidget()
         self.queue_list.setStyleSheet("""
             QListWidget {
-                border: 1px solid #ccc;
-                border-radius: 5px;
-                background-color: #f9f9f9;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                background-color: #fafafa;
+            }
+            QListWidget::item {
+                border-bottom: 1px solid #eee;
+                padding: 5px;
             }
         """)
         main_layout.addWidget(self.queue_list)
@@ -855,16 +1125,16 @@ class MainWindow(QMainWindow):
         # Control buttons
         button_layout = QHBoxLayout()
         
-        self.start_btn = QPushButton("Start Batch Render")
-        self.start_btn.setFixedHeight(50)
+        self.start_btn = QPushButton("▶️ Start Batch Render")
+        self.start_btn.setFixedHeight(55)
         self.start_btn.setEnabled(False)
         self.start_btn.setStyleSheet("""
             QPushButton {
                 background-color: #FF9800;
                 color: white;
                 border: none;
-                border-radius: 5px;
-                font-size: 16px;
+                border-radius: 8px;
+                font-size: 18px;
                 font-weight: bold;
             }
             QPushButton:hover {
@@ -872,19 +1142,21 @@ class MainWindow(QMainWindow):
             }
             QPushButton:disabled {
                 background-color: #ccc;
+                color: #999;
             }
         """)
         self.start_btn.clicked.connect(self.start_rendering)
         
-        clear_btn = QPushButton("Clear Queue")
-        clear_btn.setFixedHeight(50)
+        clear_btn = QPushButton("🗑️ Clear Queue")
+        clear_btn.setFixedHeight(55)
         clear_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f44336;
                 color: white;
                 border: none;
-                border-radius: 5px;
+                border-radius: 8px;
                 font-size: 14px;
+                font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #d32f2f;
@@ -898,8 +1170,8 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(button_layout)
         
         # Status bar
-        self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; padding: 10px;")
+        self.status_label = QLabel("✨ Ready to automate your videos!")
+        self.status_label.setStyleSheet("color: #666; padding: 10px; font-size: 12px; background-color: #f5f5f5; border-radius: 5px;")
         main_layout.addWidget(self.status_label)
         
         central_widget.setLayout(main_layout)
@@ -930,15 +1202,13 @@ class MainWindow(QMainWindow):
                 else:
                     return
             else:
-                # Use basic dialog without preview
-                from PyQt5.QtWidgets import QInputDialog
-                QMessageBox.information(self, "Basic Settings", "Add a video folder first to access full preview settings.")
+                QMessageBox.information(self, "💡 Tip", "Add a video folder first to access full preview settings!")
                 return
         
         if dialog.exec_() == QDialog.Accepted:
             self.settings = dialog.get_settings()
             self.save_settings()
-            self.status_label.setText("Settings saved successfully!")
+            self.status_label.setText("✅ Settings saved successfully!")
     
     def open_enhanced_settings(self, sample_folder):
         """Open enhanced settings with sample folder"""
@@ -946,17 +1216,16 @@ class MainWindow(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             self.settings = dialog.get_settings()
             self.save_settings()
-            self.status_label.setText("Settings configured!")
+            self.status_label.setText("✅ Settings configured!")
     
     def add_folders(self):
         """Add video folders to queue"""
         reply = QMessageBox.question(
             self,
-            "Add Folders",
-            "How would you like to add folders?\n\n"
-            "- Individual: Select one video project folder\n"
-            "- Batch Scan: Select a parent folder, app will scan for all valid video projects inside\n\n"
-            "Choose method:",
+            "📂 Add Folders",
+            "<b>How would you like to add folders?</b><br><br>"
+            "• <b>Individual:</b> Select one video project folder<br>"
+            "• <b>Batch Scan:</b> Select a parent folder, app will scan for all valid video projects inside",
             QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             QMessageBox.Yes
         )
@@ -978,7 +1247,7 @@ class MainWindow(QMainWindow):
         from pathlib import Path
         from video_processor import VideoProcessor
         
-        self.status_label.setText(f"Scanning {parent_folder}...")
+        self.status_label.setText(f"🔍 Scanning {parent_folder}...")
         QApplication.processEvents()
         
         found_folders = []
@@ -999,27 +1268,27 @@ class MainWindow(QMainWindow):
             for folder in found_folders:
                 self.add_folder_to_queue(folder, silent=True)
             
-            summary = f"[OK] Added {len(found_folders)} video project(s)\n\n"
+            summary = f"✅ Added {len(found_folders)} video project(s)\n\n"
             
             if skipped_folders:
-                summary += f"⚠ Skipped {len(skipped_folders)} folder(s):\n"
+                summary += f"⚠️ Skipped {len(skipped_folders)} folder(s):\n"
                 for name, reason in skipped_folders[:5]:
-                    summary += f"  - {name}: {reason}\n"
+                    summary += f"  • {name}: {reason}\n"
                 if len(skipped_folders) > 5:
                     summary += f"  ... and {len(skipped_folders) - 5} more"
             
-            QMessageBox.information(self, "Scan Complete", summary)
-            self.status_label.setText(f"Added {len(found_folders)} videos from scan")
+            QMessageBox.information(self, "✅ Scan Complete", summary)
+            self.status_label.setText(f"✅ Added {len(found_folders)} videos from scan")
         else:
             QMessageBox.warning(
                 self,
-                "No Valid Projects Found",
+                "❌ No Valid Projects Found",
                 f"No valid video projects found in:\n{parent_folder}\n\n"
                 "Each video project folder must contain:\n"
-                "- Audio file (voiceover)\n"
-                "- At least 1 image file"
+                "• Audio file (voiceover)\n"
+                "• At least 1 image file"
             )
-            self.status_label.setText("No valid projects found")
+            self.status_label.setText("❌ No valid projects found")
     
     def add_folder_to_queue(self, folder_path, silent=False):
         """Add a folder to the video queue"""
@@ -1034,11 +1303,11 @@ class MainWindow(QMainWindow):
             if not silent:
                 QMessageBox.warning(
                     self,
-                    "Invalid Folder",
+                    "❌ Invalid Folder",
                     f"Folder '{folder_name}' is missing required files:\n\n{error_msg}\n\n"
                     "Each folder must contain:\n"
-                    "- Voiceover audio (.mp3, .wav, etc.)\n"
-                    "- At least 1 image (.png, .jpg, etc.)"
+                    "• Voiceover audio (.mp3, .wav, etc.)\n"
+                    "• At least 1 image (.png, .jpg, etc.)"
                 )
             return
         
@@ -1062,14 +1331,25 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(True)
         
         if not silent:
-            self.status_label.setText(f"Added: {folder_name} ({num_images} image(s)) | Total videos: {len(self.video_queue)}")
+            self.status_label.setText(f"✅ Added: {folder_name} ({num_images} image(s)) • Total: {len(self.video_queue)} video(s)")
     
     def clear_queue(self):
         """Clear all items from queue"""
-        self.queue_list.clear()
-        self.video_queue = []
-        self.start_btn.setEnabled(False)
-        self.status_label.setText("Queue cleared")
+        if not self.video_queue:
+            return
+            
+        reply = QMessageBox.question(
+            self,
+            "Clear Queue?",
+            f"Are you sure you want to remove all {len(self.video_queue)} video(s) from the queue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.queue_list.clear()
+            self.video_queue = []
+            self.start_btn.setEnabled(False)
+            self.status_label.setText("🗑️ Queue cleared")
     
     def start_rendering(self):
         """Start batch rendering process"""
@@ -1079,8 +1359,8 @@ class MainWindow(QMainWindow):
         from PyQt5.QtWidgets import QInputDialog
         workers, ok = QInputDialog.getInt(
             self,
-            "Parallel Rendering",
-            "Number of simultaneous renders:",
+            "⚙️ Parallel Rendering",
+            "Number of simultaneous renders:\n(More = faster, but uses more resources)",
             value=2,
             min=1,
             max=4
@@ -1089,7 +1369,7 @@ class MainWindow(QMainWindow):
         if not ok:
             return
         
-        self.status_label.setText(f"Starting batch render for {len(self.video_queue)} videos with {workers} parallel workers...")
+        self.status_label.setText(f"🚀 Starting batch render: {len(self.video_queue)} videos with {workers} parallel worker(s)...")
         self.start_btn.setEnabled(False)
         
         folder_paths = [video['path'] for video in self.video_queue]
@@ -1119,28 +1399,29 @@ class MainWindow(QMainWindow):
             if video['path'] == folder_path:
                 if success:
                     video['widget'].set_complete()
-                    self.status_label.setText(f"[OK] Completed: {video['name']} → {output_path}")
+                    self.status_label.setText(f"✅ Completed: {video['name']} → {output_path}")
                 else:
                     video['widget'].set_error("Rendering failed")
-                    self.status_label.setText(f"[X] Failed: {video['name']}")
+                    self.status_label.setText(f"❌ Failed: {video['name']}")
                 break
     
     def on_all_complete(self):
         """Handle completion of all videos"""
         self.start_btn.setEnabled(True)
         
-        output_list = "\n".join([f"- {video['name']}: {video['path']}/{video['name']}.mp4" 
+        output_list = "\n".join([f"  • {video['name']}.mp4" 
                                  for video in self.video_queue])
         
         QMessageBox.information(
             self,
-            "Rendering Complete",
-            f"All videos have been rendered!\n\n"
-            f"Videos saved in their project folders:\n{output_list}\n\n"
-            "You can now upload your videos to YouTube!"
+            "🎉 Rendering Complete!",
+            f"<h3>All videos have been rendered!</h3>"
+            f"<p>Videos saved in their project folders:</p>"
+            f"<pre>{output_list}</pre>"
+            f"<p><b>You can now upload your videos to YouTube! 🚀</b></p>"
         )
         
-        self.status_label.setText(f"All videos complete! Check your project folders for the MP4 files.")
+        self.status_label.setText(f"🎉 All {len(self.video_queue)} video(s) complete! Check your project folders for MP4 files.")
     
     def dragEnterEvent(self, event):
         """Handle drag enter"""
@@ -1196,8 +1477,8 @@ class MainWindow(QMainWindow):
                 "Multiple Folders Dropped",
                 f"You dropped {len(folders)} folders.\n\n"
                 "How would you like to add them?\n\n"
-                "- Add All: Add each folder as a video project\n"
-                "- Scan Each: Scan each folder for video projects inside",
+                "• <b>Add All:</b> Add each folder as a video project\n"
+                "• <b>Scan Each:</b> Scan each folder for video projects inside",
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
             )
             
@@ -1215,16 +1496,16 @@ class MainWindow(QMainWindow):
                     else:
                         skipped.append((os.path.basename(folder), msg))
                 
-                summary = f"[OK] Added {added} folder(s)\n\n"
+                summary = f"✅ Added {added} folder(s)\n\n"
                 if skipped:
-                    summary += f"⚠ Skipped {len(skipped)} folder(s):\n"
+                    summary += f"⚠️ Skipped {len(skipped)} folder(s):\n"
                     for name, reason in skipped[:5]:
-                        summary += f"  - {name}: {reason}\n"
+                        summary += f"  • {name}: {reason}\n"
                     if len(skipped) > 5:
                         summary += f"  ... and {len(skipped) - 5} more"
                 
                 QMessageBox.information(self, "Drop Complete", summary)
-                self.status_label.setText(f"Added {added} videos via drag & drop")
+                self.status_label.setText(f"✅ Added {added} videos via drag & drop")
                 
             elif reply == QMessageBox.No:
                 total_added = 0
@@ -1235,7 +1516,7 @@ class MainWindow(QMainWindow):
                     after = len(self.video_queue)
                     total_added += (after - before)
                 
-                self.status_label.setText(f"Added {total_added} videos from {len(folders)} parent folder(s)")
+                self.status_label.setText(f"✅ Added {total_added} videos from {len(folders)} parent folder(s)")
         
         event.acceptProposedAction()
 
