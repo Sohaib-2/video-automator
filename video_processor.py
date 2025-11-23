@@ -216,7 +216,11 @@ class VideoProcessor:
                 f.write(f"{start_time} --> {end_time}\n")
                 f.write(f"{caption['text']}\n\n")
         
-        logger.info(f"SRT file created: {output_path}")
+        logger.info(f"SRT file created: {output_path} ({len(captions)} captions)")
+        
+        # Log first caption as sample
+        if captions:
+            logger.info(f"Sample caption: '{captions[0]['text']}' at {captions[0]['start']:.2f}s")
     
     def _format_timestamp(self, seconds: float) -> str:
         """Convert seconds to SRT timestamp format"""
@@ -242,68 +246,87 @@ class VideoProcessor:
     def create_subtitle_style(self) -> str:
         """
         Create FFmpeg subtitle style from settings with custom position
-        FIXED: Now uses caption_position from settings instead of fixed alignment
+        Uses proper ASS/SSA subtitle format
         """
         settings = self.settings
         
-        font = settings['font'].replace(' ', '')
+        # FIXED: Handle font name properly - keep spaces but escape special chars
+        font = settings['font']
+        # Only replace problematic characters
+        font_safe = font.replace(',', '').replace("'", '').replace('"', '')
         font_size = settings['font_size']
-        text_color = self._hex_to_bgr(settings['text_color'])
-        bg_color = self._hex_to_bgr(settings['bg_color'])
         
-        # FIXED: Properly use background opacity
+        # Get colors
+        text_color_hex = settings['text_color'].lstrip('#')
+        bg_color_hex = settings['bg_color'].lstrip('#')
+        
+        # Convert to RGB
+        text_r = int(text_color_hex[0:2], 16)
+        text_g = int(text_color_hex[2:4], 16)
+        text_b = int(text_color_hex[4:6], 16)
+        
+        bg_r = int(bg_color_hex[0:2], 16)
+        bg_g = int(bg_color_hex[2:4], 16)
+        bg_b = int(bg_color_hex[4:6], 16)
+        
+        # ASS color format: &H00BBGGRR (no alpha, or use &HAABBGGRR with alpha)
+        # For text: always opaque
+        text_color = f"&H00{text_b:02X}{text_g:02X}{text_r:02X}"
+        
+        # For background: handle opacity
         has_background = settings.get('has_background', True)
         if has_background:
-            # Convert 0-100 to 0-255, then invert for alpha (0=transparent, 255=opaque)
-            bg_opacity_value = int(settings['bg_opacity'] * 2.55)
-            bg_alpha = f"{bg_opacity_value:02X}"
+            # ASS alpha: 00=opaque, FF=transparent (inverted!)
+            opacity_percent = settings.get('bg_opacity', 80)
+            # Convert 0-100% to 0-255, then invert
+            alpha = int((100 - opacity_percent) * 2.55)
+            bg_color = f"&H{alpha:02X}{bg_b:02X}{bg_g:02X}{bg_r:02X}"
+            border_style = 4  # Background box
         else:
-            # No background = fully transparent
-            bg_alpha = "00"
+            # No background - use outline instead
+            bg_color = f"&H00{bg_b:02X}{bg_g:02X}{bg_r:02X}"
+            border_style = 3  # Outline only, no box
         
-        # Update bg_color to include alpha
-        bg_color_with_alpha = f"{bg_color[:-2]}{bg_alpha}"
-        
-        # FIXED: Get custom caption position from settings
+        # Get custom caption position from settings
         caption_pos = settings.get('caption_position', {'x': 0.5, 'y': 0.9})
         
         x_norm = caption_pos['x']
         y_norm = caption_pos['y']
         
-        # FIXED: Calculate pixel positions for 1920x1080 frame
-        # MarginV is distance from BOTTOM of screen
+        # Calculate margins for 1920x1080
+        # MarginV is pixels from BOTTOM of screen
         margin_v = int((1.0 - y_norm) * 1080)
         
-        # Determine alignment based on horizontal position
+        # Alignment: 1-3=bottom, 4-6=middle, 7-9=top; 1/4/7=left, 2/5/8=center, 3/6/9=right
         if x_norm < 0.33:
-            alignment = 1  # Bottom left
+            h_align = 1  # Left
             margin_l = int(x_norm * 1920)
             margin_r = 0
         elif x_norm > 0.66:
-            alignment = 3  # Bottom right
+            h_align = 3  # Right
             margin_l = 0
             margin_r = int((1.0 - x_norm) * 1920)
         else:
-            alignment = 2  # Bottom center
+            h_align = 2  # Center
             margin_l = 0
             margin_r = 0
         
-        # FIXED: Adjust alignment for vertical position
+        # Adjust for vertical position
         if y_norm < 0.33:
-            # Top row
-            alignment += 6  # 1→7, 2→8, 3→9
+            alignment = h_align + 6  # Top row (7,8,9)
         elif y_norm < 0.66:
-            # Middle row
-            alignment += 3  # 1→4, 2→5, 3→6
-        # else: bottom row (no change needed)
+            alignment = h_align + 3  # Middle row (4,5,6)
+        else:
+            alignment = h_align  # Bottom row (1,2,3)
         
+        # Build style string
         style = (
-            f"FontName={font},"
+            f"FontName={font_safe},"
             f"FontSize={font_size},"
             f"PrimaryColour={text_color},"
-            f"BackColour={bg_color_with_alpha},"
-            f"BorderStyle=4,"  # Background box
-            f"Outline=0,"
+            f"BackColour={bg_color},"
+            f"BorderStyle={border_style},"
+            f"Outline=2,"  # Outline width
             f"Shadow=0,"
             f"MarginV={margin_v},"
             f"MarginL={margin_l},"
@@ -311,20 +334,10 @@ class VideoProcessor:
             f"Alignment={alignment}"
         )
         
-        logger.info(f"Caption style: Position=({x_norm:.2f}, {y_norm:.2f}), Alignment={alignment}, MarginV={margin_v}, HasBG={has_background}, Opacity={settings.get('bg_opacity', 80)}%")
+        logger.info(f"Subtitle style: Pos=({x_norm:.2f},{y_norm:.2f}), Align={alignment}, MarginV={margin_v}px")
+        logger.info(f"Colors: Text={text_color}, BG={bg_color}, HasBG={has_background}, Opacity={settings.get('bg_opacity',80)}%")
         
         return style
-    
-    def _hex_to_bgr(self, hex_color: str) -> str:
-        """Convert hex color to FFmpeg BGR format with alpha placeholder"""
-        hex_color = hex_color.lstrip('#')
-        
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-        
-        # Return with FF alpha (will be replaced in create_subtitle_style)
-        return f"&HFF{b:02X}{g:02X}{r:02X}"
     
     def assemble_video(
         self,
@@ -344,6 +357,23 @@ class VideoProcessor:
             Tuple of (success: bool, output_path: str)
         """
         try:
+            # LOG ALL SETTINGS AT START
+            logger.info("="*80)
+            logger.info("STARTING VIDEO ASSEMBLY")
+            logger.info("="*80)
+            logger.info(f"Folder: {folder_path}")
+            logger.info(f"Settings:")
+            logger.info(f"  - Font: {self.settings.get('font', 'N/A')}")
+            logger.info(f"  - Font Size: {self.settings.get('font_size', 'N/A')}")
+            logger.info(f"  - Text Color: {self.settings.get('text_color', 'N/A')}")
+            logger.info(f"  - BG Color: {self.settings.get('bg_color', 'N/A')}")
+            logger.info(f"  - BG Opacity: {self.settings.get('bg_opacity', 'N/A')}%")
+            logger.info(f"  - Has Background: {self.settings.get('has_background', 'N/A')}")
+            logger.info(f"  - Motion Effect: {self.settings.get('motion_effect', 'N/A')}")
+            logger.info(f"  - Caption Position: {self.settings.get('caption_position', 'N/A')}")
+            logger.info(f"  - Crop Settings: {self.settings.get('crop_settings', 'N/A')}")
+            logger.info("="*80)
+            
             files = self.detect_files_in_folder(folder_path)
             
             is_valid, error = self.validate_folder(folder_path)
@@ -391,7 +421,11 @@ class VideoProcessor:
             last_update_progress = 0
             total_frames = int(duration * 30)
             
+            stderr_output = []  # Collect stderr for error reporting
+            
             for line in process.stderr:
+                stderr_output.append(line)  # Store for debugging
+                
                 if progress_callback:
                     frame_match = re.search(r'frame=\s*(\d+)', line)
                     if frame_match:
@@ -439,6 +473,10 @@ class VideoProcessor:
                 return True, output_path
             else:
                 logger.error(f"FFmpeg failed with return code {process.returncode}")
+                # Log last 20 lines of stderr for debugging
+                logger.error("FFmpeg error output (last 20 lines):")
+                for line in stderr_output[-20:]:
+                    logger.error(f"  {line.strip()}")
                 return False, ""
                 
         except Exception as e:
@@ -447,66 +485,111 @@ class VideoProcessor:
             traceback.print_exc()
             return False, ""
     
-    def _get_motion_filter(self, effect: str, time_per_image: float, fps: int) -> str:
+    def _get_motion_filter(self, effect: str, time_per_image: float, fps: int, crop_settings: Dict = None) -> str:
         """
-        Get FFmpeg filter for motion effect
+        Get FFmpeg filter for motion effect with optional crop settings
         
         Args:
             effect: Motion effect name (Static, Zoom In, Zoom Out, Pan Right, Pan Left, Ken Burns)
             time_per_image: Duration of image in seconds
             fps: Frame rate
+            crop_settings: Optional crop region from preview (x, y, width, height)
             
         Returns:
             FFmpeg filter string
         """
         num_frames = int(time_per_image * fps)
         
+        # FIXED: Build crop filter from settings if available
+        if crop_settings:
+            crop_x = crop_settings['x']
+            crop_y = crop_settings['y']
+            crop_w = crop_settings['width']
+            crop_h = crop_settings['height']
+            
+            # FIXED: Validate crop settings - all values must be positive
+            if crop_x < 0 or crop_y < 0 or crop_w <= 0 or crop_h <= 0:
+                logger.warning(f"Invalid crop settings detected: {crop_settings}. Using default auto-crop instead.")
+                base_filter = "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
+            else:
+                # Crop first, then scale to 1920x1080
+                base_filter = f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale=1920:1080"
+                logger.info(f"Using custom crop: {crop_w}x{crop_h} at ({crop_x},{crop_y})")
+        else:
+            # Default: scale and crop to fill 1920x1080
+            base_filter = "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
+        
         if effect == "Static":
             # No motion - fastest render
-            return f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps={fps}"
+            return f"{base_filter},fps={fps}"
         
         elif effect == "Zoom In":
             # Zoom from 1.0 to 1.3
             return (
-                f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,"
+                f"{base_filter},"
                 f"zoompan=z='min(zoom+0.001,1.3)':d={num_frames}:s=1920x1080:fps={fps}"
             )
         
         elif effect == "Zoom Out":
             # Zoom from 1.3 to 1.0
             return (
-                f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,"
+                f"{base_filter},"
                 f"zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-0.001))':d={num_frames}:s=1920x1080:fps={fps}"
             )
         
         elif effect == "Pan Right":
-            # Pan from left to right
-            return (
-                f"scale=2304:1296:force_original_aspect_ratio=increase,"  # Scale up 20%
-                f"crop=1920:1080:'min(iw-1920,(iw-1920)*(on/{num_frames}))':0,"  # Pan right
-                f"fps={fps}"
-            )
+            # Pan from left to right - need extra room
+            if crop_settings:
+                # If custom crop, apply pan after scaling
+                return (
+                    f"{base_filter},"
+                    f"scale=2304:1296,"  # Scale up 20% for pan room
+                    f"crop=1920:1080:'min(iw-1920,(iw-1920)*(on/{num_frames}))':0,"
+                    f"fps={fps}"
+                )
+            else:
+                return (
+                    f"scale=2304:1296:force_original_aspect_ratio=increase,"
+                    f"crop=1920:1080:'min(iw-1920,(iw-1920)*(on/{num_frames}))':0,"
+                    f"fps={fps}"
+                )
         
         elif effect == "Pan Left":
             # Pan from right to left
-            return (
-                f"scale=2304:1296:force_original_aspect_ratio=increase,"  # Scale up 20%
-                f"crop=1920:1080:'(iw-1920)*(1-on/{num_frames})':0,"  # Pan left
-                f"fps={fps}"
-            )
+            if crop_settings:
+                return (
+                    f"{base_filter},"
+                    f"scale=2304:1296,"
+                    f"crop=1920:1080:'(iw-1920)*(1-on/{num_frames})':0,"
+                    f"fps={fps}"
+                )
+            else:
+                return (
+                    f"scale=2304:1296:force_original_aspect_ratio=increase,"
+                    f"crop=1920:1080:'(iw-1920)*(1-on/{num_frames})':0,"
+                    f"fps={fps}"
+                )
         
         elif effect == "Ken Burns":
             # Zoom in + subtle pan
-            return (
-                f"scale=2304:1296:force_original_aspect_ratio=increase,"  # Scale up for room
-                f"zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                f"d={num_frames}:s=1920x1080:fps={fps}"
-            )
+            if crop_settings:
+                return (
+                    f"{base_filter},"
+                    f"scale=2304:1296,"
+                    f"zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                    f"d={num_frames}:s=1920x1080:fps={fps}"
+                )
+            else:
+                return (
+                    f"scale=2304:1296:force_original_aspect_ratio=increase,"
+                    f"zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                    f"d={num_frames}:s=1920x1080:fps={fps}"
+                )
         
         else:
             # Default to static if unknown
             logger.warning(f"Unknown motion effect: {effect}, using Static")
-            return f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fps={fps}"
+            return f"{base_filter},fps={fps}"
     
     def _build_ffmpeg_command(
         self,
@@ -532,10 +615,16 @@ class VideoProcessor:
         # Base command
         cmd = ['ffmpeg', '-y']
         
+        # FIXED: Don't use CUDA hwaccel with custom crops - causes issues
         # Hardware acceleration
-        if use_gpu and check_gpu_available():
+        crop_settings = self.settings.get('crop_settings', None)
+        if use_gpu and check_gpu_available() and not crop_settings:
+            # Only use CUDA if no custom crop
             cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
             logger.info("Using CUDA hardware acceleration for decoding")
+        else:
+            if crop_settings:
+                logger.info("Disabling CUDA hwaccel due to custom crop (compatibility)")
         
         # Calculate time per image
         time_per_image = duration / num_images
@@ -555,9 +644,12 @@ class VideoProcessor:
         # Build filter complex with motion effect
         filter_parts = []
         
+        # FIXED: Get crop settings from settings
+        crop_settings = self.settings.get('crop_settings', None)
+        
         # Apply motion effect to each image
         for i in range(num_images):
-            motion_filter = self._get_motion_filter(motion_effect, time_per_image, fps)
+            motion_filter = self._get_motion_filter(motion_effect, time_per_image, fps, crop_settings)
             filter_parts.append(f"[{i}:v]{motion_filter}[v{i}]")
         
         # Concatenate all video streams
@@ -565,10 +657,23 @@ class VideoProcessor:
         concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
         filter_parts.append(concat_filter)
         
-        # Add subtitles with FIXED positioning
-        srt_path_escaped = srt_path.replace('\\', '/').replace(':', r'\:')
-        subtitle_filter = f"[vconcat]subtitles={srt_path_escaped}:force_style='{subtitle_style}'[vout]"
+        # Add subtitles with positioning
+        # FIXED: Properly escape path for FFmpeg subtitle filter
+        # For Windows: convert backslashes to forward slashes
+        # For all: escape special chars including spaces
+        srt_path_normalized = srt_path.replace('\\', '/')
+        
+        # For subtitle filter, we need to escape: : (colon), ' (single quote), and \ (backslash)
+        # But we DON'T escape spaces - the filter handles them
+        srt_path_escaped = srt_path_normalized.replace(':', r'\:').replace("'", r"'\''")
+        
+        # Build subtitle filter
+        subtitle_filter = f"[vconcat]subtitles='{srt_path_escaped}':force_style='{subtitle_style}'[vout]"
         filter_parts.append(subtitle_filter)
+        
+        logger.info(f"Subtitle SRT: {srt_path}")
+        logger.info(f"Subtitle escaped: {srt_path_escaped}")
+        logger.info(f"Style: {subtitle_style}")
         
         filter_complex = ';'.join(filter_parts)
         cmd.extend(['-filter_complex', filter_complex])

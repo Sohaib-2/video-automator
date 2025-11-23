@@ -159,11 +159,29 @@ class ImageCropView(QGraphicsView):
         img_pos = self.image_item.pos()
         img_scale = self.image_item.scale()
         
+        # Get original image dimensions
+        orig_width = self.image_item.boundingRect().width()
+        orig_height = self.image_item.boundingRect().height()
+        
         # Calculate crop in original image coordinates
         x = (crop_rect.x() - img_pos.x()) / img_scale
         y = (crop_rect.y() - img_pos.y()) / img_scale
         w = crop_rect.width() / img_scale
         h = crop_rect.height() / img_scale
+        
+        # FIXED: Clamp values to valid ranges (must be within image boundaries)
+        x = max(0, min(x, orig_width - 1))
+        y = max(0, min(y, orig_height - 1))
+        
+        # Ensure crop doesn't exceed image boundaries
+        if x + w > orig_width:
+            w = orig_width - x
+        if y + h > orig_height:
+            h = orig_height - y
+        
+        # Ensure minimum size (at least 100x100)
+        w = max(100, w)
+        h = max(100, h)
         
         return {
             'x': int(x),
@@ -365,18 +383,29 @@ class EnhancedSettingsDialog(QDialog):
         self.resize(1400, 850)
         
         # Default settings
-        self.settings = current_settings or {
+        default_settings = {
             'font': 'Arial Bold',
             'font_size': 48,
             'text_color': '#FFFF00',
             'bg_color': '#000000',
             'bg_opacity': 80,
-            'has_background': True,  # NEW
+            'has_background': True,
             'position': 'Bottom Center',
             'motion_effect': 'Zoom In',
             'crop_settings': None,
-            'caption_position': {'x': 0.5, 'y': 0.9}
+            'caption_position': {'x': 0.5, 'y': 0.9},
+            'preview_text': 'Sample Caption Text'
         }
+        
+        # FIXED: Properly merge current settings with defaults
+        if current_settings:
+            self.settings = {**default_settings, **current_settings}
+            print(f"[DEBUG] Loaded settings with crop: {self.settings.get('crop_settings')}")
+            print(f"[DEBUG] Loaded caption position: {self.settings.get('caption_position')}")
+            print(f"[DEBUG] Loaded motion effect: {self.settings.get('motion_effect')}")
+        else:
+            self.settings = default_settings
+            print("[DEBUG] Using default settings (no previous settings found)")
         
         self.sample_folder = sample_folder
         self.sample_image = None
@@ -394,6 +423,14 @@ class EnhancedSettingsDialog(QDialog):
         # Load preview if available
         if self.sample_image:
             self.load_preview()
+            
+            # FIXED: Show indicator if settings were loaded from previous save
+            if current_settings and current_settings.get('crop_settings'):
+                # Settings were previously saved
+                self.setWindowTitle("Video Settings - Setup & Preview (Previous settings loaded)")
+        else:
+            # No sample image
+            self.setWindowTitle("Video Settings - Setup & Preview (No preview available)")
     
     def init_ui(self):
         layout = QHBoxLayout()
@@ -590,10 +627,12 @@ class EnhancedSettingsDialog(QDialog):
         grid.addLayout(text_preset_layout, row, 1)
         row += 1
         
-        # FIXED: Add "Use Background" checkbox
+        # FIXED: Add "Use Background" checkbox with saved state
         grid.addWidget(QLabel("Background:"), row, 0)
         self.has_bg_checkbox = QCheckBox("Enable Background")
-        self.has_bg_checkbox.setChecked(self.settings.get('has_background', True))
+        # FIXED: Load saved state
+        saved_has_bg = self.settings.get('has_background', True)
+        self.has_bg_checkbox.setChecked(saved_has_bg)
         self.has_bg_checkbox.stateChanged.connect(self.on_bg_toggle)
         grid.addWidget(self.has_bg_checkbox, row, 1)
         row += 1
@@ -603,7 +642,8 @@ class EnhancedSettingsDialog(QDialog):
         self.bg_color_btn = QPushButton(self.settings['bg_color'])
         self.bg_color_btn.setStyleSheet(f"background-color: {self.settings['bg_color']}; color: white; font-weight: bold;")
         self.bg_color_btn.clicked.connect(self.choose_bg_color)
-        self.bg_color_btn.setEnabled(self.settings.get('has_background', True))
+        # FIXED: Set enabled state based on checkbox
+        self.bg_color_btn.setEnabled(saved_has_bg)
         grid.addWidget(self.bg_color_btn, row, 1)
         row += 1
         
@@ -615,7 +655,8 @@ class EnhancedSettingsDialog(QDialog):
         self.opacity_spin.setValue(self.settings['bg_opacity'])
         self.opacity_spin.setSuffix(" %")
         self.opacity_spin.valueChanged.connect(self.update_preview)
-        self.opacity_spin.setEnabled(self.settings.get('has_background', True))
+        # FIXED: Set enabled state based on checkbox
+        self.opacity_spin.setEnabled(saved_has_bg)
         opacity_layout.addWidget(self.opacity_spin)
         grid.addLayout(opacity_layout, row, 1)
         row += 1
@@ -625,7 +666,9 @@ class EnhancedSettingsDialog(QDialog):
         # Preview sample text input
         sample_group = QGroupBox("📝 Preview Text")
         sample_layout = QVBoxLayout()
-        self.sample_text_input = QLineEdit("Sample Caption Text")
+        # FIXED: Load saved preview text if available
+        preview_text = self.settings.get('preview_text', 'Sample Caption Text')
+        self.sample_text_input = QLineEdit(preview_text)
         self.sample_text_input.textChanged.connect(self.update_preview)
         self.sample_text_input.setPlaceholderText("Type preview text here...")
         sample_layout.addWidget(self.sample_text_input)
@@ -680,21 +723,110 @@ class EnhancedSettingsDialog(QDialog):
         self.setLayout(layout)
     
     def load_preview(self):
-        """Load preview image and setup view"""
+        """Load preview image and setup view with saved settings"""
         if self.sample_image:
             # Load image into crop view
             self.crop_view.load_image(self.sample_image)
+            
+            # FIXED: Apply saved crop settings if available
+            crop_settings = self.settings.get('crop_settings', None)
+            if crop_settings:
+                # Calculate zoom and position from crop settings
+                self.apply_crop_settings_to_preview(crop_settings)
             
             # Load into effect previews
             for preview in self.effect_previews.values():
                 preview.load_preview(self.sample_image)
             
-            # Select current effect
+            # FIXED: Select current effect and highlight it
             current_effect = self.settings.get('motion_effect', 'Zoom In')
             self.select_effect(current_effect)
             
-            # Update caption preview
+            # FIXED: Update caption preview with saved position
             self.update_preview()
+            
+            # FIXED: Apply saved caption position
+            caption_pos = self.settings.get('caption_position', None)
+            if caption_pos and self.crop_view.caption_item:
+                # Convert normalized position back to scene coordinates
+                crop_rect = self.crop_view.crop_frame.rect()
+                x = crop_rect.x() + caption_pos['x'] * crop_rect.width()
+                y = crop_rect.y() + caption_pos['y'] * crop_rect.height()
+                
+                # Adjust for caption center point
+                caption_rect = self.crop_view.caption_item.boundingRect()
+                x = x - caption_rect.width() / 2
+                y = y - caption_rect.height() / 2
+                
+                self.crop_view.caption_item.setPos(x, y)
+    
+    def apply_crop_settings_to_preview(self, crop_settings: dict):
+        """Apply saved crop settings to preview by calculating required zoom and position"""
+        try:
+            if not self.crop_view.image_item or not self.crop_view.original_pixmap:
+                print("[DEBUG] Cannot apply crop: no image loaded")
+                return
+            
+            # Get original image dimensions
+            orig_width = self.crop_view.original_pixmap.width()
+            orig_height = self.crop_view.original_pixmap.height()
+            
+            print(f"[DEBUG] Original image: {orig_width}x{orig_height}")
+            
+            # Get crop dimensions from settings
+            crop_x = crop_settings.get('x', 0)
+            crop_y = crop_settings.get('y', 0)
+            crop_w = crop_settings.get('width', orig_width)
+            crop_h = crop_settings.get('height', orig_height)
+            
+            print(f"[DEBUG] Applying crop: {crop_w}x{crop_h} at ({crop_x},{crop_y})")
+            
+            # Validate crop settings
+            if crop_w <= 0 or crop_h <= 0:
+                print(f"[DEBUG] Invalid crop dimensions: {crop_w}x{crop_h}")
+                return
+            
+            # Get crop frame dimensions (1920x1080 in scene coordinates)
+            crop_frame_rect = self.crop_view.crop_frame.rect()
+            frame_w = crop_frame_rect.width()
+            frame_h = crop_frame_rect.height()
+            
+            # Calculate required zoom
+            # The crop region should fill the frame
+            zoom_x = frame_w / crop_w
+            zoom_y = frame_h / crop_h
+            zoom = max(zoom_x, zoom_y)  # Use larger zoom to ensure full coverage
+            
+            print(f"[DEBUG] Calculated zoom: {zoom:.2f}x (from zoom_x={zoom_x:.2f}, zoom_y={zoom_y:.2f})")
+            
+            # Clamp zoom to valid range
+            zoom = max(self.crop_view.min_zoom, min(self.crop_view.max_zoom, zoom))
+            
+            print(f"[DEBUG] Clamped zoom: {zoom:.2f}x")
+            
+            # Apply zoom
+            self.crop_view.image_item.setScale(zoom)
+            self.crop_view.zoom_level = zoom
+            self.zoom_label.setText(f"{zoom:.1f}x")
+            
+            # Calculate image position
+            # The crop region (crop_x, crop_y) should align with frame's top-left
+            scaled_crop_x = crop_x * zoom
+            scaled_crop_y = crop_y * zoom
+            
+            img_x = crop_frame_rect.x() - scaled_crop_x
+            img_y = crop_frame_rect.y() - scaled_crop_y
+            
+            print(f"[DEBUG] Setting image position: ({img_x:.1f}, {img_y:.1f})")
+            
+            self.crop_view.image_item.setPos(img_x, img_y)
+            
+            print("[DEBUG] Crop settings applied successfully!")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to apply crop settings: {e}")
+            import traceback
+            traceback.print_exc()
     
     def on_zoom_in(self):
         """Handle zoom in button"""
@@ -772,14 +904,43 @@ class EnhancedSettingsDialog(QDialog):
         crop_region = self.crop_view.get_crop_region()
         caption_pos = self.crop_view.get_caption_position()
         
+        # Validate crop settings
+        if crop_region:
+            if crop_region['x'] < 0 or crop_region['y'] < 0:
+                reply = QMessageBox.question(
+                    self,
+                    "⚠️ Invalid Crop Position",
+                    "The image position resulted in an invalid crop.\n\n"
+                    "The crop has been adjusted to valid boundaries.\n"
+                    f"Adjusted crop: {crop_region['width']}x{crop_region['height']} at ({crop_region['x']},{crop_region['y']})\n\n"
+                    "Continue saving?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.No:
+                    return
+        
+        # Update all settings
         self.settings.update({
             'font': self.font_combo.currentText(),
             'font_size': self.font_size_spin.value(),
             'bg_opacity': self.opacity_spin.value(),
             'has_background': self.has_bg_checkbox.isChecked(),
             'crop_settings': crop_region,
-            'caption_position': caption_pos
+            'caption_position': caption_pos,
+            'preview_text': self.sample_text_input.text()  # FIXED: Save preview text
         })
+        
+        # Show success message
+        QMessageBox.information(
+            self,
+            "✅ Settings Saved",
+            f"Your settings have been saved successfully!\n\n"
+            f"📝 Font: {self.settings['font']} ({self.settings['font_size']}px)\n"
+            f"🎨 Caption Position: ({caption_pos['x']:.2f}, {caption_pos['y']:.2f})\n"
+            f"🖼️ Crop: {crop_region['width']}x{crop_region['height']} at ({crop_region['x']},{crop_region['y']})\n"
+            f"🎬 Motion: {self.settings['motion_effect']}\n\n"
+            "These settings will be used for all videos."
+        )
         
         self.accept()
     
