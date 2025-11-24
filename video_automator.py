@@ -76,7 +76,7 @@ class ImageCropView(QGraphicsView):
             self.fitInView(self.crop_frame, Qt.KeepAspectRatio)
         
     def load_image(self, image_path: str):
-        """Load image into view"""
+        """Load image into view and auto-fit to 16:9 frame"""
         self.original_pixmap = QPixmap(image_path)
         
         if self.image_item:
@@ -91,11 +91,12 @@ class ImageCropView(QGraphicsView):
         self.image_item.setFlag(QGraphicsPixmapItem.ItemIsSelectable, True)
         self.image_item.setCursor(Qt.OpenHandCursor)
         
-        # Center image under crop frame
-        self.center_image()
+        # NEW: Auto-fit to fill 16:9 frame perfectly
+        self.auto_fit_to_frame()
         
         # FIXED: Fit view to show crop frame properly
         self.fitInView(self.crop_frame, Qt.KeepAspectRatio)
+
         
     def center_image(self):
         """Center image under crop frame"""
@@ -140,12 +141,9 @@ class ImageCropView(QGraphicsView):
         return self.zoom_level
     
     def reset_view(self):
-        """Reset zoom and center image"""
-        self.zoom_level = 1.0
-        if self.image_item:
-            self.image_item.setScale(1.0)
-            self.center_image()
-        return self.zoom_level
+        """Reset zoom and center image using auto-fit"""
+        zoom = self.auto_fit_to_frame()
+        return zoom
             
     def get_crop_region(self):
         """Get the crop region in original image coordinates"""
@@ -261,6 +259,47 @@ class ImageCropView(QGraphicsView):
             zoom_factor = 1.1 if event.angleDelta().y() > 0 else 0.9
             new_zoom = self.zoom_level * zoom_factor
             self.set_zoom(new_zoom)
+
+    def auto_fit_to_frame(self):
+        """
+        Automatically fit image to fill 16:9 crop frame
+        Calculates optimal zoom and position to fill frame completely
+        """
+        if not self.image_item or not self.original_pixmap:
+            return 1.0
+        
+        # Get image and frame dimensions
+        img_w = self.original_pixmap.width()
+        img_h = self.original_pixmap.height()
+        frame_w = self.crop_frame.rect().width()  # 1920
+        frame_h = self.crop_frame.rect().height()  # 1080
+        
+        # Calculate zoom needed to fill frame completely
+        zoom_x = frame_w / img_w
+        zoom_y = frame_h / img_h
+        
+        # Use LARGER zoom to ensure frame is completely filled (no gaps)
+        optimal_zoom = max(zoom_x, zoom_y)
+        
+        # Clamp to valid range
+        optimal_zoom = max(self.min_zoom, min(self.max_zoom, optimal_zoom))
+        
+        # Apply zoom
+        self.zoom_level = optimal_zoom
+        self.image_item.setScale(optimal_zoom)
+        
+        # Center image under frame
+        scaled_img_w = img_w * optimal_zoom
+        scaled_img_h = img_h * optimal_zoom
+        
+        x = frame_w / 2 - scaled_img_w / 2
+        y = frame_h / 2 - scaled_img_h / 2
+        
+        self.image_item.setPos(x, y)
+        
+        print(f"[AUTO-FIT] zoom={optimal_zoom:.2f}x, pos=({x:.1f},{y:.1f})")
+        
+        return optimal_zoom
 
 
 class MotionEffectPreview(QLabel):
@@ -521,6 +560,21 @@ class EnhancedSettingsDialog(QDialog):
             }
         """)
         reset_btn.clicked.connect(self.on_reset_view)
+        autofit_btn = QPushButton("📐 Auto-Fit")
+        autofit_btn.setFixedSize(100, 50)
+        autofit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        autofit_btn.clicked.connect(self.on_auto_fit)
+        zoom_buttons_layout.addWidget(autofit_btn)
         zoom_buttons_layout.addWidget(reset_btn)
         
         zoom_buttons_layout.addStretch()
@@ -883,6 +937,13 @@ class EnhancedSettingsDialog(QDialog):
         color = QColorDialog.getColor()
         if color.isValid():
             self.set_text_color(color.name())
+
+    def on_auto_fit(self):
+        """Handle auto-fit button click"""
+        zoom = self.crop_view.auto_fit_to_frame()
+        self.zoom_label.setText(f"{zoom:.1f}x")
+
+
     
     def set_text_color(self, color):
         self.settings['text_color'] = color
