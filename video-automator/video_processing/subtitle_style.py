@@ -50,7 +50,7 @@ class SubtitleStyleBuilder:
         
         # Background and outline settings
         has_background = self.settings.get('has_background', True)
-        has_outline = self.settings.get('has_outline', not has_background)  # Default: outline when no bg
+        has_outline = self.settings.get('has_outline', not has_background)
         
         if has_background:
             # Background mode
@@ -82,9 +82,13 @@ class SubtitleStyleBuilder:
         x_norm = caption_pos['x']
         y_norm = caption_pos['y']
         
-        # Caption width boundaries
+        # Caption width boundaries - enforce stricter margins to prevent overflow
         caption_max_width_percent = self.settings.get('caption_width_percent', 0.80)
-        side_margin = int((1920 * (1 - caption_max_width_percent)) / 2)
+        
+        # Calculate minimum safe margins (at least 10% on each side for guaranteed spacing)
+        min_side_margin = int(1920 * 0.10)  # 192px minimum margin - ALWAYS have space!
+        calculated_side_margin = int((1920 * (1 - caption_max_width_percent)) / 2)
+        side_margin = max(min_side_margin, calculated_side_margin)
         
         # Determine vertical alignment based on position
         if y_norm < 0.33:
@@ -98,22 +102,12 @@ class SubtitleStyleBuilder:
         else:
             # Middle alignment
             v_align_base = 3
-            # For middle, margin_v represents offset from center
             margin_v = int((0.5 - y_norm) * 1080)
         
-        # Determine horizontal alignment and margins
-        if x_norm < 0.4:
-            h_align = 1  # Left
-            margin_l = int(x_norm * 1920)
-            margin_r = side_margin
-        elif x_norm > 0.6:
-            h_align = 3  # Right
-            margin_l = side_margin
-            margin_r = int((1.0 - x_norm) * 1920)
-        else:
-            h_align = 2  # Center
-            margin_l = side_margin
-            margin_r = side_margin
+        # Always use center alignment with symmetric margins for better wrapping
+        h_align = 2  # Center
+        margin_l = side_margin
+        margin_r = side_margin
         
         alignment = v_align_base + h_align
         
@@ -132,12 +126,13 @@ class SubtitleStyleBuilder:
             f"MarginL={margin_l},"
             f"MarginR={margin_r},"
             f"Alignment={alignment},"
-            f"WrapStyle=2"  # Smart wrapping with end-of-line word breaking
+            f"WrapStyle=2"
         )
         
         # Log style details
+        max_caption_width = 1920 - margin_l - margin_r
         logger.info(f"Subtitle style: Pos=({x_norm:.2f},{y_norm:.2f}), Align={alignment}, MarginV={margin_v}px")
-        logger.info(f"Caption boundaries: MarginL={margin_l}px, MarginR={margin_r}px (max width: {1920-margin_l-margin_r}px)")
+        logger.info(f"Caption boundaries: MarginL={margin_l}px, MarginR={margin_r}px (max width: {max_caption_width}px / {(max_caption_width/1920)*100:.1f}%)")
         logger.info(f"Colors: Text={text_color}, BG={bg_color}, Outline={outline_color}, HasBG={has_background}")
         logger.info(f"Border: Style={border_style}, Outline={outline_width}px, Shadow={shadow_depth}px, Bold={is_bold}")
         
