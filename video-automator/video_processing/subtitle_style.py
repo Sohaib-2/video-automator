@@ -28,12 +28,21 @@ class SubtitleStyleBuilder:
         Returns:
             ASS style format string
         """
-        # Font settings
+        # Font settings - handle "Font Bold" format
         font = self.settings.get('font', 'Arial Bold')
-        font_safe = font.replace(',', '').replace("'", '').replace('"', '')
+        
+        # Check if font name contains "Bold" and extract base font name
+        if ' Bold' in font:
+            font_base = font.replace(' Bold', '')
+            is_bold = -1  # ASS uses -1 for bold
+        else:
+            font_base = font
+            is_bold = 0
+        
+        font_safe = font_base.replace(',', '').replace("'", '').replace('"', '')
         font_size = self.settings.get('font_size', 48)
         
-        logger.info(f"Using font size: {font_size}px for 1080p output")
+        logger.info(f"Using font: {font_safe} (Bold: {is_bold}), Size: {font_size}px for 1080p output")
         
         # Color conversion to ASS format
         text_color = self._convert_color(self.settings.get('text_color', '#FFFF00'))
@@ -73,19 +82,31 @@ class SubtitleStyleBuilder:
         x_norm = caption_pos['x']
         y_norm = caption_pos['y']
         
-        # Vertical margin
-        margin_v = int((1.0 - y_norm) * 1080)
-        
         # Caption width boundaries
         caption_max_width_percent = self.settings.get('caption_width_percent', 0.80)
         side_margin = int((1920 * (1 - caption_max_width_percent)) / 2)
         
-        # Horizontal alignment and margins
-        if x_norm < 0.33:
+        # Determine vertical alignment based on position
+        if y_norm < 0.33:
+            # Top alignment
+            v_align_base = 6
+            margin_v = int(y_norm * 1080)
+        elif y_norm > 0.66:
+            # Bottom alignment (default)
+            v_align_base = 0
+            margin_v = int((1.0 - y_norm) * 1080)
+        else:
+            # Middle alignment
+            v_align_base = 3
+            # For middle, margin_v represents offset from center
+            margin_v = int((0.5 - y_norm) * 1080)
+        
+        # Determine horizontal alignment and margins
+        if x_norm < 0.4:
             h_align = 1  # Left
             margin_l = int(x_norm * 1920)
             margin_r = side_margin
-        elif x_norm > 0.66:
+        elif x_norm > 0.6:
             h_align = 3  # Right
             margin_l = side_margin
             margin_r = int((1.0 - x_norm) * 1920)
@@ -94,18 +115,13 @@ class SubtitleStyleBuilder:
             margin_l = side_margin
             margin_r = side_margin
         
-        # Vertical alignment
-        if y_norm < 0.33:
-            alignment = h_align + 6  # Top
-        elif y_norm < 0.66:
-            alignment = h_align + 3  # Middle
-        else:
-            alignment = h_align  # Bottom
+        alignment = v_align_base + h_align
         
-        # Build style string
+        # Build style string with proper wrapping
         style = (
             f"FontName={font_safe},"
             f"FontSize={font_size},"
+            f"Bold={is_bold},"
             f"PrimaryColour={text_color},"
             f"BackColour={bg_color},"
             f"OutlineColour={outline_color},"
@@ -115,14 +131,15 @@ class SubtitleStyleBuilder:
             f"MarginV={margin_v},"
             f"MarginL={margin_l},"
             f"MarginR={margin_r},"
-            f"Alignment={alignment}"
+            f"Alignment={alignment},"
+            f"WrapStyle=2"  # Smart wrapping with end-of-line word breaking
         )
         
         # Log style details
         logger.info(f"Subtitle style: Pos=({x_norm:.2f},{y_norm:.2f}), Align={alignment}, MarginV={margin_v}px")
         logger.info(f"Caption boundaries: MarginL={margin_l}px, MarginR={margin_r}px (max width: {1920-margin_l-margin_r}px)")
         logger.info(f"Colors: Text={text_color}, BG={bg_color}, Outline={outline_color}, HasBG={has_background}")
-        logger.info(f"Border: Style={border_style}, Outline={outline_width}px, Shadow={shadow_depth}px")
+        logger.info(f"Border: Style={border_style}, Outline={outline_width}px, Shadow={shadow_depth}px, Bold={is_bold}")
         
         return style
     
