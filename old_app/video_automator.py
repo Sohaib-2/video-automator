@@ -13,7 +13,7 @@ from PyQt5.QtGui import (QFont, QColor, QPalette, QPixmap, QPen, QBrush,
                          QPainter, QTransform, QImage)
 
 # Import video processor
-from video_processor import VideoProcessor, BatchRenderer, check_ffmpeg_installed, check_gpu_available
+from old_app.video_processor import VideoProcessor, BatchRenderer, check_ffmpeg_installed, check_gpu_available
 
 class DraggableCaptionItem(QGraphicsTextItem):
     """Draggable caption text item for preview"""
@@ -451,7 +451,7 @@ class EnhancedSettingsDialog(QDialog):
         
         # Find sample image
         if sample_folder:
-            from video_processor import VideoProcessor
+            from old_app.video_processor import VideoProcessor
             processor = VideoProcessor(self.settings)
             files = processor.detect_files_in_folder(sample_folder)
             if files['images']:
@@ -1182,7 +1182,7 @@ class MainWindow(QMainWindow):
             folder = QFileDialog.getExistingDirectory(self, "Select Sample Video Project Folder")
             if folder:
                 # Validate it
-                from video_processor import VideoProcessor
+                from old_app.video_processor import VideoProcessor
                 processor = VideoProcessor(self.settings)
                 is_valid, error_msg = processor.validate_folder(folder)
                 
@@ -1467,7 +1467,7 @@ class MainWindow(QMainWindow):
     def scan_and_add_folders(self, parent_folder: str):
         """Scan parent folder for valid video projects"""
         from pathlib import Path
-        from video_processor import VideoProcessor
+        from old_app.video_processor import VideoProcessor
         
         self.status_label.setText(f"🔍 Scanning {parent_folder}...")
         QApplication.processEvents()
@@ -1514,7 +1514,7 @@ class MainWindow(QMainWindow):
     
     def add_folder_to_queue(self, folder_path, silent=False):
         """Add a folder to the video queue"""
-        from video_processor import VideoProcessor
+        from old_app.video_processor import VideoProcessor
         
         folder_name = os.path.basename(folder_path)
         
@@ -1661,7 +1661,7 @@ class MainWindow(QMainWindow):
     
     def dropEvent(self, event):
         """Handle drop"""
-        from video_processor import VideoProcessor
+        from old_app.video_processor import VideoProcessor
         
         self.setStyleSheet("QMainWindow { background-color: white; }")
         
