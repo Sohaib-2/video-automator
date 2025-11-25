@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
             try:
                 with open(self.config_file, 'r') as f:
                     settings = json.load(f)
+                    
                     # Add new keys if missing
                     if 'has_background' not in settings:
                         settings['has_background'] = True
@@ -123,11 +124,25 @@ class MainWindow(QMainWindow):
                         settings['caption_position'] = {'x': 0.5, 'y': 0.9}
                     if 'caption_width_percent' not in settings:
                         settings['caption_width_percent'] = 0.80
+                    
+                    # UPDATED: Handle motion effects migration
+                    if 'motion_effects' not in settings:
+                        # Convert old single effect to list
+                        old_effect = settings.get('motion_effect', 'Static')
+                        settings['motion_effects'] = [old_effect]
+                        # Remove old key
+                        if 'motion_effect' in settings:
+                            del settings['motion_effect']
+                    
+                    # Ensure motion_effects is always a list
+                    if isinstance(settings.get('motion_effects'), str):
+                        settings['motion_effects'] = [settings['motion_effects']]
+                    
                     return settings
             except:
                 pass
         
-        # Default settings
+        # Default settings with motion_effects as list
         return {
             'font': 'Arial Bold',
             'font_size': 48,
@@ -140,12 +155,12 @@ class MainWindow(QMainWindow):
             'outline_width': 3,
             'shadow_depth': 2,
             'position': 'Bottom Center',
-            'motion_effect': 'Zoom In',
+            'motion_effects': ['Static'],  # Changed to list
             'crop_settings': None,
             'caption_position': {'x': 0.5, 'y': 0.9},
             'caption_width_percent': 0.80
         }
-    
+
     def save_settings(self):
         """Save settings to config file"""
         with open(self.config_file, 'w') as f:

@@ -1,6 +1,6 @@
 """
 FFmpeg Command Builder
-Constructs complete FFmpeg commands for video assembly
+Constructs complete FFmpeg commands for video assembly with multiple effect support
 """
 
 import logging
@@ -56,8 +56,19 @@ class FFmpegCommandBuilder:
         style_builder = SubtitleStyleBuilder(self.settings)
         subtitle_style = style_builder.build()
         
-        motion_effect = self.settings.get('motion_effect', 'Zoom In')
-        logger.info(f"Applying VIDEO-LEVEL motion effect: {motion_effect}")
+        # Get motion effects (can be list or single string for backward compatibility)
+        motion_effects = self.settings.get('motion_effects', None)
+        
+        # Handle backward compatibility
+        if motion_effects is None:
+            # Check old single effect key
+            old_effect = self.settings.get('motion_effect', 'Static')
+            motion_effects = [old_effect]
+        elif isinstance(motion_effects, str):
+            # Convert single string to list
+            motion_effects = [motion_effects]
+        
+        logger.info(f"Selected motion effects: {', '.join(motion_effects)}")
         
         # Start command
         cmd = ['ffmpeg', '-y']
@@ -90,7 +101,7 @@ class FFmpegCommandBuilder:
         # Process each image - NO motion effects, just crop/scale
         for i, img_path in enumerate(images):
             image_filter = MotionEffectBuilder.build_filter(
-                motion_effect,  # Not used in new version
+                "Static",  # Not used in new version
                 time_per_image,
                 fps,
                 crop_settings,
@@ -103,22 +114,22 @@ class FFmpegCommandBuilder:
         concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
         filter_parts.append(concat_filter)
         
-        # Apply VIDEO-LEVEL motion effect AFTER concatenation
-        video_motion_filter = MotionEffectBuilder.build_video_level_filter(
-            motion_effect,
+        # Apply VIDEO-LEVEL motion effects AFTER concatenation
+        video_motion_filters = MotionEffectBuilder.build_video_level_filters(
+            motion_effects,
             duration,
             fps
         )
         
-        if video_motion_filter:
-            # Apply motion effect to concatenated video
-            filter_parts.append(f"[vconcat]{video_motion_filter}[vmotion]")
+        if video_motion_filters:
+            # Apply motion effects to concatenated video
+            filter_parts.append(f"[vconcat]{video_motion_filters}[vmotion]")
             video_input_for_subtitles = "[vmotion]"
-            logger.info(f"Applied video-level {motion_effect} effect to entire video")
+            logger.info(f"Applied {len(motion_effects)} video-level effect(s)")
         else:
-            # No motion effect (Static)
+            # No motion effects (Static)
             video_input_for_subtitles = "[vconcat]"
-            logger.info("No motion effect applied (Static)")
+            logger.info("No motion effects applied (Static)")
         
         # Add subtitles to the final video stream
         srt_path_normalized = srt_path.replace('\\', '/')
@@ -139,13 +150,15 @@ class FFmpegCommandBuilder:
         cmd.extend(['-map', '[vout]'])
         cmd.extend(['-map', f'{num_images}:a'])
         
-        # Bitrate calculation
-        if motion_effect == "Static":
-            target_bitrate = f"{int(1 + fps * 0.03)}M"
-            max_bitrate = f"{int(1.5 + fps * 0.04)}M"
-        else:
+        # Bitrate calculation - adjust based on effects
+        has_motion = any(e != "Static" for e in motion_effects)
+        
+        if has_motion:
             target_bitrate = f"{int(1.5 + fps * 0.05)}M"
             max_bitrate = f"{int(2 + fps * 0.06)}M"
+        else:
+            target_bitrate = f"{int(1 + fps * 0.03)}M"
+            max_bitrate = f"{int(1.5 + fps * 0.04)}M"
         
         logger.info(f"Using smart bitrate: {target_bitrate} (max: {max_bitrate})")
         

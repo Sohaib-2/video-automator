@@ -1,10 +1,10 @@
 """
 Motion Effects Builder
-Generates FFmpeg filter strings for various motion effects
+Generates FFmpeg filter strings for various motion effects with multiple effect support
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -15,11 +15,11 @@ class MotionEffectBuilder:
     
     SUPPORTED_EFFECTS = [
         "Static",
-        "Zoom In",
-        "Zoom Out",
         "Pan Right",
         "Pan Left",
-        "Ken Burns"
+        "Noise",
+        "Camera Shake",
+        "Tilt"
     ]
     
     @staticmethod
@@ -52,14 +52,56 @@ class MotionEffectBuilder:
         return f"{base_filter},fps={fps}"
     
     @staticmethod
-    def build_video_level_filter(
+    def build_video_level_filters(
+        effects: List[str],
+        total_duration: float,
+        fps: int
+    ) -> Optional[str]:
+        """
+        Build FFmpeg filters for multiple video-level motion effects
+        Applied to entire concatenated video
+        
+        Args:
+            effects: List of motion effect names
+            total_duration: Total video duration in seconds
+            fps: Frames per second
+            
+        Returns:
+            Combined FFmpeg filter string for video-level effects, or None for Static only
+        """
+        # Remove "Static" from effects list if present
+        active_effects = [e for e in effects if e != "Static"]
+        
+        if not active_effects:
+            logger.info("No motion effects selected (Static)")
+            return None
+        
+        filter_chain = []
+        
+        for effect in active_effects:
+            effect_filter = MotionEffectBuilder._build_single_effect(
+                effect, total_duration, fps
+            )
+            if effect_filter:
+                filter_chain.append(effect_filter)
+        
+        if not filter_chain:
+            return None
+        
+        # Combine filters with comma separator
+        combined = ",".join(filter_chain)
+        logger.info(f"Applied {len(filter_chain)} video-level effect(s): {', '.join(active_effects)}")
+        
+        return combined
+    
+    @staticmethod
+    def _build_single_effect(
         effect: str,
         total_duration: float,
         fps: int
     ) -> Optional[str]:
         """
-        Build FFmpeg filter for video-level motion effects
-        Applied to entire concatenated video
+        Build single effect filter
         
         Args:
             effect: Motion effect name
@@ -67,31 +109,11 @@ class MotionEffectBuilder:
             fps: Frames per second
             
         Returns:
-            FFmpeg filter string for video-level effect, or None for Static
+            FFmpeg filter string for single effect
         """
-        if effect == "Static":
-            # No effect needed
-            return None
-        
-        elif effect == "Zoom In":
-            # Zoom in across entire video duration - use time-based formula
-            logger.info(f"Applying video-level Zoom In over {total_duration:.1f}s")
-            return (
-                f"scale=2496:1404:force_original_aspect_ratio=increase,"
-                f"zoompan=z='min(1.0+0.3*t/{total_duration:.2f},1.3)':s=1920x1080:fps={fps}:d=1"
-            )
-        
-        elif effect == "Zoom Out":
-            # Zoom out across entire video duration - use time-based formula
-            logger.info(f"Applying video-level Zoom Out over {total_duration:.1f}s")
-            return (
-                f"scale=2496:1404:force_original_aspect_ratio=increase,"
-                f"zoompan=z='max(1.3-0.3*t/{total_duration:.2f},1.0)':s=1920x1080:fps={fps}:d=1"
-            )
-        
-        elif effect == "Pan Right":
+        if effect == "Pan Right":
             # Pan right across entire video duration
-            logger.info(f"Applying video-level Pan Right over {total_duration:.1f}s")
+            logger.info(f"Adding Pan Right effect over {total_duration:.1f}s")
             return (
                 f"scale=2304:1296:force_original_aspect_ratio=increase,"
                 f"crop=1920:1080:'min(iw-1920,(iw-1920)*t/{total_duration:.2f})':0"
@@ -99,24 +121,41 @@ class MotionEffectBuilder:
         
         elif effect == "Pan Left":
             # Pan left across entire video duration
-            logger.info(f"Applying video-level Pan Left over {total_duration:.1f}s")
+            logger.info(f"Adding Pan Left effect over {total_duration:.1f}s")
             return (
                 f"scale=2304:1296:force_original_aspect_ratio=increase,"
                 f"crop=1920:1080:'(iw-1920)*max(0,1-t/{total_duration:.2f})':0"
             )
         
-        elif effect == "Ken Burns":
-            # Ken Burns effect across entire video duration
-            logger.info(f"Applying video-level Ken Burns over {total_duration:.1f}s")
+        elif effect == "Noise":
+            # Add film grain/noise effect
+            # alls: noise intensity (0-100), allf: noise flags (t=temporal, u=uniform)
+            logger.info("Adding Noise effect (film grain) - HIGH INTENSITY")
+            return "noise=alls=65:allf=t+u"  # Increased from 45 to 65 for very visible noise
+        
+        elif effect == "Camera Shake":
+            # Camera shake using random movement - SUBTLE
+            # Shake intensity: 5px movement (reduced), frequency: 3Hz (slow)
+            logger.info("Adding Camera Shake effect - SUBTLE & SLOW")
             return (
-                f"scale=2496:1404:force_original_aspect_ratio=increase,"
-                f"zoompan=z='min(1.0+0.5*t/{total_duration:.2f},1.5)':"
-                f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                f"s=1920x1080:fps={fps}:d=1"
+                f"crop=1910:1070:"  # Smaller crop for less shake (was 1900:1060)
+                f"x='5+5*sin(t*3)':"  # Reduced from 10px to 5px amplitude
+                f"y='5+5*cos(t*3)',"  # Reduced from 10px to 5px amplitude
+                f"scale=1920:1080:flags=lanczos"
+            )
+        
+        elif effect == "Tilt":
+            # Tilt/rotation effect - gentle left-right tilting
+            # Rotates the video smoothly left and right
+            logger.info("Adding Tilt effect (left-right rotation)")
+            return (
+                f"rotate='2*PI/180*sin(t*0.5)':"  # 2 degree tilt, 0.5Hz frequency (very slow)
+                f"c=black:ow=rotw(2*PI/180):oh=roth(2*PI/180),"
+                f"scale=1920:1080:flags=lanczos"
             )
         
         else:
-            logger.warning(f"Unknown motion effect: {effect}, no effect applied")
+            logger.warning(f"Unknown motion effect: {effect}, skipping")
             return None
     
     @staticmethod

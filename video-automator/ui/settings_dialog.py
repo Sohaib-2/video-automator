@@ -1,12 +1,12 @@
 """
 Enhanced Settings Dialog
-Live preview of caption settings with outline controls and crop/zoom
+Live preview of caption settings with multiple effect selection
 """
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox,
     QPushButton, QGridLayout, QCheckBox, QGroupBox, QLineEdit, QMessageBox,
-    QColorDialog
+    QColorDialog, QScrollArea, QWidget
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
@@ -18,7 +18,7 @@ from .styles import Styles
 
 
 class EnhancedSettingsDialog(QDialog):
-    """Enhanced settings dialog with live preview"""
+    """Enhanced settings dialog with live preview and multi-effect selection"""
     
     def __init__(self, parent=None, current_settings=None, sample_folder=None):
         super().__init__(parent)
@@ -39,7 +39,7 @@ class EnhancedSettingsDialog(QDialog):
             'outline_width': 3,
             'shadow_depth': 2,
             'position': 'Bottom Center',
-            'motion_effect': 'Zoom In',
+            'motion_effects': ['Static'],  # Changed to list
             'crop_settings': None,
             'caption_position': {'x': 0.5, 'y': 0.9},
             'preview_text': 'Sample Caption Text',
@@ -49,9 +49,15 @@ class EnhancedSettingsDialog(QDialog):
         # Merge current settings with defaults
         if current_settings:
             self.settings = {**default_settings, **current_settings}
+            
+            # Handle backward compatibility for old 'motion_effect' key
+            if 'motion_effect' in self.settings and 'motion_effects' not in self.settings:
+                old_effect = self.settings['motion_effect']
+                self.settings['motion_effects'] = [old_effect]
+            
             print(f"[DEBUG] Loaded settings with crop: {self.settings.get('crop_settings')}")
             print(f"[DEBUG] Loaded caption position: {self.settings.get('caption_position')}")
-            print(f"[DEBUG] Loaded motion effect: {self.settings.get('motion_effect')}")
+            print(f"[DEBUG] Loaded motion effects: {self.settings.get('motion_effects')}")
         else:
             self.settings = default_settings
             print("[DEBUG] Using default settings (no previous settings found)")
@@ -85,12 +91,12 @@ class EnhancedSettingsDialog(QDialog):
         # Left side - Preview
         left_panel = self._create_preview_panel()
         
-        # Right side - Settings
+        # Right side - Settings (with scroll)
         right_panel = self._create_settings_panel()
         
         # Add panels to main layout
         layout.addLayout(left_panel, stretch=3)
-        layout.addLayout(right_panel, stretch=2)
+        layout.addWidget(right_panel, stretch=2)
         
         self.setLayout(layout)
     
@@ -183,37 +189,69 @@ class EnhancedSettingsDialog(QDialog):
         return zoom_group
     
     def _create_motion_effects(self):
-        """Create motion effects section"""
+        """Create motion effects section with checkboxes for multi-selection"""
         effects_layout = QVBoxLayout()
         
-        effects_label = QLabel("🎬 Motion Effects")
+        effects_label = QLabel("🎬 Motion Effects (Select Multiple)")
         effects_label.setFont(QFont('Arial', 12, QFont.Bold))
         effects_label.setStyleSheet("color: #1976D2;")
         effects_layout.addWidget(effects_label)
         
-        self.effect_previews = {}
-        previews_layout = QHBoxLayout()
-        effects = ["Static", "Zoom In", "Zoom Out", "Pan Right", "Pan Left"]
+        # Get currently selected effects
+        selected_effects = self.settings.get('motion_effects', ['Static'])
+        if isinstance(selected_effects, str):
+            selected_effects = [selected_effects]
+        
+        # Create checkboxes for each effect
+        self.effect_checkboxes = {}
+        checkbox_layout = QVBoxLayout()
+        
+        effects = ["Static", "Pan Right", "Pan Left", "Noise", "Camera Shake", "Tilt"]
         
         for effect in effects:
-            preview = MotionEffectPreview(effect)
-            preview.mousePressEvent = lambda e, eff=effect: self.select_effect(eff)
-            self.effect_previews[effect] = preview
+            checkbox = QCheckBox(effect)
+            checkbox.setFont(QFont('Arial', 10))
+            checkbox.setChecked(effect in selected_effects)
+            checkbox.stateChanged.connect(self.on_effect_changed)
             
-            container = QVBoxLayout()
-            container.addWidget(preview)
-            label = QLabel(effect)
-            label.setAlignment(Qt.AlignCenter)
-            label.setFont(QFont('Arial', 9, QFont.Bold))
-            container.addWidget(label)
+            # Add description
+            descriptions = {
+                "Static": "No motion - image stays still",
+                "Pan Right": "Slowly pan from left to right",
+                "Pan Left": "Slowly pan from right to left",
+                "Noise": "Add film grain/noise effect",
+                "Camera Shake": "Add subtle camera shake",
+                "Tilt": "Gentle left-right tilting/rotation"
+            }
             
-            previews_layout.addLayout(container)
+            effect_container = QHBoxLayout()
+            effect_container.addWidget(checkbox)
+            
+            desc_label = QLabel(f"- {descriptions[effect]}")
+            desc_label.setStyleSheet("color: #666; font-size: 9px; font-style: italic;")
+            effect_container.addWidget(desc_label)
+            effect_container.addStretch()
+            
+            checkbox_layout.addLayout(effect_container)
+            self.effect_checkboxes[effect] = checkbox
         
-        effects_layout.addLayout(previews_layout)
+        effects_layout.addLayout(checkbox_layout)
+        
+        # Warning label for conflicting effects
+        self.effect_warning = QLabel("")
+        self.effect_warning.setStyleSheet("color: #FF9800; font-size: 10px; font-weight: bold;")
+        self.effect_warning.setWordWrap(True)
+        effects_layout.addWidget(self.effect_warning)
+        
         return effects_layout
     
     def _create_settings_panel(self):
-        """Create right settings panel"""
+        """Create right settings panel with scroll"""
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        settings_widget = QWidget()
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
         
@@ -236,7 +274,10 @@ class EnhancedSettingsDialog(QDialog):
         button_layout = self._create_buttons()
         right_panel.addLayout(button_layout)
         
-        return right_panel
+        settings_widget.setLayout(right_panel)
+        scroll_area.setWidget(settings_widget)
+        
+        return scroll_area
     
     def _create_settings_grid(self):
         """Create settings grid"""
@@ -323,7 +364,7 @@ class EnhancedSettingsDialog(QDialog):
         grid.addWidget(self.opacity_spin, row, 1)
         row += 1
         
-        # === NEW: Outline Controls ===
+        # === Outline Controls ===
         grid.addWidget(QLabel("Outline:"), row, 0)
         self.has_outline_checkbox = QCheckBox("Enable Outline")
         saved_has_outline = self.settings.get('has_outline', not saved_has_bg)
@@ -386,6 +427,37 @@ class EnhancedSettingsDialog(QDialog):
         
         return button_layout
     
+    def on_effect_changed(self):
+        """Handle effect checkbox changes"""
+        selected = self.get_selected_effects()
+        
+        # Check for conflicting effects
+        conflicts = []
+        if "Pan Right" in selected and "Pan Left" in selected:
+            conflicts.append("⚠️ Pan Right and Pan Left cannot be used together")
+        
+        if conflicts:
+            self.effect_warning.setText("\n".join(conflicts))
+        else:
+            self.effect_warning.setText("")
+        
+        # Log selected effects
+        print(f"[DEBUG] Selected effects: {selected}")
+    
+    def get_selected_effects(self):
+        """Get list of selected effects"""
+        selected = []
+        for effect, checkbox in self.effect_checkboxes.items():
+            if checkbox.isChecked():
+                selected.append(effect)
+        
+        # If nothing selected, default to Static
+        if not selected:
+            selected = ["Static"]
+            self.effect_checkboxes["Static"].setChecked(True)
+        
+        return selected
+    
     def load_preview(self):
         """Load preview image and setup view with saved settings"""
         if self.sample_image:
@@ -396,14 +468,6 @@ class EnhancedSettingsDialog(QDialog):
             crop_settings = self.settings.get('crop_settings', None)
             if crop_settings:
                 self.apply_crop_settings_to_preview(crop_settings)
-            
-            # Load into effect previews
-            for preview in self.effect_previews.values():
-                preview.load_preview(self.sample_image)
-            
-            # Select current effect
-            current_effect = self.settings.get('motion_effect', 'Zoom In')
-            self.select_effect(current_effect)
             
             # Update caption preview
             self.update_preview()
@@ -518,13 +582,6 @@ class EnhancedSettingsDialog(QDialog):
         self.settings['has_outline'] = has_outline
         self.update_preview()
     
-    def select_effect(self, effect_name: str):
-        """Select motion effect"""
-        for name, preview in self.effect_previews.items():
-            preview.set_selected(name == effect_name)
-        
-        self.settings['motion_effect'] = effect_name
-    
     def update_preview(self):
         """Update caption preview on image"""
         font = QFont(self.font_combo.currentText(), self.font_size_spin.value())
@@ -583,6 +640,19 @@ class EnhancedSettingsDialog(QDialog):
     
     def save_and_close(self):
         """Save all settings and close"""
+        # Get selected effects
+        selected_effects = self.get_selected_effects()
+        
+        # Check for conflicts
+        if "Pan Right" in selected_effects and "Pan Left" in selected_effects:
+            QMessageBox.warning(
+                self,
+                "⚠️ Conflicting Effects",
+                "Pan Right and Pan Left cannot be used together.\n\n"
+                "Please uncheck one of them before saving."
+            )
+            return
+        
         crop_region = self.crop_view.get_crop_region()
         caption_pos = self.crop_view.get_caption_position()
         
@@ -614,10 +684,12 @@ class EnhancedSettingsDialog(QDialog):
             'shadow_depth': self.settings.get('shadow_depth', 2),
             'crop_settings': crop_region,
             'caption_position': caption_pos,
-            'preview_text': self.sample_text_input.text()
+            'preview_text': self.sample_text_input.text(),
+            'motion_effects': selected_effects  # Save as list
         })
         
         # Show success message
+        effects_str = ", ".join(selected_effects)
         QMessageBox.information(
             self,
             "✅ Settings Saved",
@@ -626,7 +698,7 @@ class EnhancedSettingsDialog(QDialog):
             f"🎨 Caption Position: ({caption_pos['x']:.2f}, {caption_pos['y']:.2f})\n"
             f"🖼️ Crop: {crop_region['width']}x{crop_region['height']} "
             f"at ({crop_region['x']},{crop_region['y']})\n"
-            f"🎬 Motion: {self.settings['motion_effect']}\n"
+            f"🎬 Motion Effects: {effects_str}\n"
             f"✏️ Outline: {'Enabled' if self.settings['has_outline'] else 'Disabled'}\n\n"
             "These settings will be used for all videos."
         )
