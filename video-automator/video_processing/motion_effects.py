@@ -16,7 +16,6 @@ class MotionEffectBuilder:
     SUPPORTED_EFFECTS = [
         "Static",
         "Noise",
-        "Camera Shake",
         "Tilt"
     ]
     

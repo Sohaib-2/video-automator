@@ -206,7 +206,7 @@ class EnhancedSettingsDialog(QDialog):
         self.effect_checkboxes = {}
         checkbox_layout = QVBoxLayout()
         
-        effects = ["Static", "Pan Right", "Pan Left", "Noise", "Camera Shake", "Tilt"]
+        effects = ["Static", "Noise", "Tilt"]
         
         for effect in effects:
             checkbox = QCheckBox(effect)
@@ -217,10 +217,7 @@ class EnhancedSettingsDialog(QDialog):
             # Add description
             descriptions = {
                 "Static": "No motion - image stays still",
-                "Pan Right": "Slowly pan from left to right",
-                "Pan Left": "Slowly pan from right to left",
                 "Noise": "Add film grain/noise effect",
-                "Camera Shake": "Add subtle camera shake",
                 "Tilt": "Gentle left-right tilting/rotation"
             }
             
