@@ -1,12 +1,13 @@
 """
 Enhanced Settings Dialog
-Live preview of caption settings with multiple effect selection
+Live preview of caption settings with effect intensity sliders
+UPDATED: Only 3 effects (Static, Noise, Tilt) with intensity control
 """
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox,
     QPushButton, QGridLayout, QCheckBox, QGroupBox, QLineEdit, QMessageBox,
-    QColorDialog, QScrollArea, QWidget
+    QColorDialog, QScrollArea, QWidget, QSlider
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
@@ -18,13 +19,13 @@ from .styles import Styles
 
 
 class EnhancedSettingsDialog(QDialog):
-    """Enhanced settings dialog with live preview and multi-effect selection"""
+    """Enhanced settings dialog with live preview and effect intensity sliders"""
     
     def __init__(self, parent=None, current_settings=None, sample_folder=None):
         super().__init__(parent)
         self.setWindowTitle("Video Settings - Setup & Preview")
         self.setModal(True)
-        self.resize(1400, 850)
+        self.resize(1400, 900)
         
         # Default settings
         default_settings = {
@@ -39,7 +40,8 @@ class EnhancedSettingsDialog(QDialog):
             'outline_width': 3,
             'shadow_depth': 2,
             'position': 'Bottom Center',
-            'motion_effects': ['Static'],  # Changed to list
+            'motion_effects': ['Static'],
+            'motion_effect_intensities': {'Noise': 50, 'Tilt': 50},
             'crop_settings': None,
             'caption_position': {'x': 0.5, 'y': 0.9},
             'preview_text': 'Sample Caption Text',
@@ -55,9 +57,14 @@ class EnhancedSettingsDialog(QDialog):
                 old_effect = self.settings['motion_effect']
                 self.settings['motion_effects'] = [old_effect]
             
+            # Ensure motion_effect_intensities exists
+            if 'motion_effect_intensities' not in self.settings:
+                self.settings['motion_effect_intensities'] = {'Noise': 50, 'Tilt': 50}
+            
             print(f"[DEBUG] Loaded settings with crop: {self.settings.get('crop_settings')}")
             print(f"[DEBUG] Loaded caption position: {self.settings.get('caption_position')}")
             print(f"[DEBUG] Loaded motion effects: {self.settings.get('motion_effects')}")
+            print(f"[DEBUG] Loaded intensities: {self.settings.get('motion_effect_intensities')}")
         else:
             self.settings = default_settings
             print("[DEBUG] Using default settings (no previous settings found)")
@@ -122,7 +129,7 @@ class EnhancedSettingsDialog(QDialog):
         
         # Motion effects
         effects_section = self._create_motion_effects()
-        left_panel.addLayout(effects_section)
+        left_panel.addWidget(effects_section)
         
         return left_panel
     
@@ -189,58 +196,166 @@ class EnhancedSettingsDialog(QDialog):
         return zoom_group
     
     def _create_motion_effects(self):
-        """Create motion effects section with checkboxes for multi-selection"""
+        """Create motion effects section with checkboxes and intensity sliders"""
+        effects_group = QGroupBox("🎬 Motion Effects")
+        effects_group.setStyleSheet("QGroupBox { font-weight: bold; }")
         effects_layout = QVBoxLayout()
         
-        effects_label = QLabel("🎬 Motion Effects (Select Multiple)")
-        effects_label.setFont(QFont('Arial', 12, QFont.Bold))
-        effects_label.setStyleSheet("color: #1976D2;")
-        effects_layout.addWidget(effects_label)
-        
-        # Get currently selected effects
+        # Get currently selected effects and intensities
         selected_effects = self.settings.get('motion_effects', ['Static'])
         if isinstance(selected_effects, str):
             selected_effects = [selected_effects]
         
-        # Create checkboxes for each effect
+        intensities = self.settings.get('motion_effect_intensities', {'Noise': 50, 'Tilt': 50})
+        
+        # Create checkboxes and sliders for each effect
         self.effect_checkboxes = {}
-        checkbox_layout = QVBoxLayout()
+        self.effect_sliders = {}
+        self.effect_value_labels = {}
         
-        effects = ["Static", "Noise", "Tilt"]
+        # Static effect (no intensity slider)
+        static_checkbox = QCheckBox("Static")
+        static_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        static_checkbox.setChecked('Static' in selected_effects)
+        static_checkbox.stateChanged.connect(self.on_effect_changed)
+        effects_layout.addWidget(static_checkbox)
         
-        for effect in effects:
-            checkbox = QCheckBox(effect)
-            checkbox.setFont(QFont('Arial', 10))
-            checkbox.setChecked(effect in selected_effects)
-            checkbox.stateChanged.connect(self.on_effect_changed)
-            
-            # Add description
-            descriptions = {
-                "Static": "No motion - image stays still",
-                "Noise": "Add film grain/noise effect",
-                "Tilt": "Gentle left-right tilting/rotation"
-            }
-            
-            effect_container = QHBoxLayout()
-            effect_container.addWidget(checkbox)
-            
-            desc_label = QLabel(f"- {descriptions[effect]}")
-            desc_label.setStyleSheet("color: #666; font-size: 9px; font-style: italic;")
-            effect_container.addWidget(desc_label)
-            effect_container.addStretch()
-            
-            checkbox_layout.addLayout(effect_container)
-            self.effect_checkboxes[effect] = checkbox
+        static_desc = QLabel("   └ No motion - image stays still")
+        static_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        effects_layout.addWidget(static_desc)
         
-        effects_layout.addLayout(checkbox_layout)
+        self.effect_checkboxes['Static'] = static_checkbox
         
-        # Warning label for conflicting effects
-        self.effect_warning = QLabel("")
-        self.effect_warning.setStyleSheet("color: #FF9800; font-size: 10px; font-weight: bold;")
-        self.effect_warning.setWordWrap(True)
-        effects_layout.addWidget(self.effect_warning)
+        effects_layout.addSpacing(10)
         
-        return effects_layout
+        # Noise effect with intensity slider
+        noise_checkbox = QCheckBox("Noise (Film Grain)")
+        noise_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        noise_checkbox.setChecked('Noise' in selected_effects)
+        noise_checkbox.stateChanged.connect(self.on_effect_changed)
+        effects_layout.addWidget(noise_checkbox)
+        
+        noise_desc = QLabel("   └ Add big chunky film grain effect")
+        noise_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        effects_layout.addWidget(noise_desc)
+        
+        # Noise intensity slider
+        noise_slider_layout = QHBoxLayout()
+        noise_slider_layout.addSpacing(30)
+        noise_slider_layout.addWidget(QLabel("Intensity:"))
+        
+        noise_slider = QSlider(Qt.Horizontal)
+        noise_slider.setRange(0, 100)
+        noise_slider.setValue(intensities.get('Noise', 50))
+        noise_slider.setEnabled('Noise' in selected_effects)
+        noise_slider.valueChanged.connect(self.on_intensity_changed)
+        noise_slider_layout.addWidget(noise_slider)
+        
+        noise_value_label = QLabel(f"{intensities.get('Noise', 50)}%")
+        noise_value_label.setMinimumWidth(45)
+        noise_value_label.setStyleSheet("font-weight: bold; color: #1976D2;")
+        noise_slider_layout.addWidget(noise_value_label)
+        
+        effects_layout.addLayout(noise_slider_layout)
+        
+        self.effect_checkboxes['Noise'] = noise_checkbox
+        self.effect_sliders['Noise'] = noise_slider
+        self.effect_value_labels['Noise'] = noise_value_label
+        
+        effects_layout.addSpacing(10)
+        
+        # Tilt effect with intensity slider
+        tilt_checkbox = QCheckBox("Tilt (Rotation)")
+        tilt_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        tilt_checkbox.setChecked('Tilt' in selected_effects)
+        tilt_checkbox.stateChanged.connect(self.on_effect_changed)
+        effects_layout.addWidget(tilt_checkbox)
+        
+        tilt_desc = QLabel("   └ Gentle left-right tilting/rotation")
+        tilt_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        effects_layout.addWidget(tilt_desc)
+        
+        # Tilt intensity slider
+        tilt_slider_layout = QHBoxLayout()
+        tilt_slider_layout.addSpacing(30)
+        tilt_slider_layout.addWidget(QLabel("Intensity:"))
+        
+        tilt_slider = QSlider(Qt.Horizontal)
+        tilt_slider.setRange(0, 100)
+        tilt_slider.setValue(intensities.get('Tilt', 50))
+        tilt_slider.setEnabled('Tilt' in selected_effects)
+        tilt_slider.valueChanged.connect(self.on_intensity_changed)
+        tilt_slider_layout.addWidget(tilt_slider)
+        
+        tilt_value_label = QLabel(f"{intensities.get('Tilt', 50)}%")
+        tilt_value_label.setMinimumWidth(45)
+        tilt_value_label.setStyleSheet("font-weight: bold; color: #1976D2;")
+        tilt_slider_layout.addWidget(tilt_value_label)
+        
+        effects_layout.addLayout(tilt_slider_layout)
+        
+        self.effect_checkboxes['Tilt'] = tilt_checkbox
+        self.effect_sliders['Tilt'] = tilt_slider
+        self.effect_value_labels['Tilt'] = tilt_value_label
+        
+        effects_layout.addSpacing(10)
+        
+        # Info label
+        info_label = QLabel(
+            "💡 You can combine multiple effects!\n"
+            "   Adjust intensity sliders to control effect strength."
+        )
+        info_label.setStyleSheet(
+            "color: #666; font-size: 10px; padding: 8px; "
+            "background-color: #E3F2FD; border-radius: 5px;"
+        )
+        info_label.setWordWrap(True)
+        effects_layout.addWidget(info_label)
+        
+        effects_group.setLayout(effects_layout)
+        return effects_group
+    
+    def on_effect_changed(self):
+        """Handle effect checkbox changes"""
+        # Enable/disable sliders based on checkbox state
+        for effect in ['Noise', 'Tilt']:
+            if effect in self.effect_checkboxes and effect in self.effect_sliders:
+                is_checked = self.effect_checkboxes[effect].isChecked()
+                self.effect_sliders[effect].setEnabled(is_checked)
+        
+        # Log selected effects
+        selected = self.get_selected_effects()
+        print(f"[DEBUG] Selected effects: {selected}")
+    
+    def on_intensity_changed(self):
+        """Handle intensity slider changes"""
+        # Update value labels
+        for effect in ['Noise', 'Tilt']:
+            if effect in self.effect_sliders and effect in self.effect_value_labels:
+                value = self.effect_sliders[effect].value()
+                self.effect_value_labels[effect].setText(f"{value}%")
+    
+    def get_selected_effects(self):
+        """Get list of selected effects"""
+        selected = []
+        for effect, checkbox in self.effect_checkboxes.items():
+            if checkbox.isChecked():
+                selected.append(effect)
+        
+        # If nothing selected, default to Static
+        if not selected:
+            selected = ["Static"]
+            self.effect_checkboxes["Static"].setChecked(True)
+        
+        return selected
+    
+    def get_effect_intensities(self):
+        """Get intensity values for each effect"""
+        intensities = {}
+        for effect in ['Noise', 'Tilt']:
+            if effect in self.effect_sliders:
+                intensities[effect] = self.effect_sliders[effect].value()
+        return intensities
     
     def _create_settings_panel(self):
         """Create right settings panel with scroll"""
@@ -424,37 +539,6 @@ class EnhancedSettingsDialog(QDialog):
         
         return button_layout
     
-    def on_effect_changed(self):
-        """Handle effect checkbox changes"""
-        selected = self.get_selected_effects()
-        
-        # Check for conflicting effects
-        conflicts = []
-        if "Pan Right" in selected and "Pan Left" in selected:
-            conflicts.append("⚠️ Pan Right and Pan Left cannot be used together")
-        
-        if conflicts:
-            self.effect_warning.setText("\n".join(conflicts))
-        else:
-            self.effect_warning.setText("")
-        
-        # Log selected effects
-        print(f"[DEBUG] Selected effects: {selected}")
-    
-    def get_selected_effects(self):
-        """Get list of selected effects"""
-        selected = []
-        for effect, checkbox in self.effect_checkboxes.items():
-            if checkbox.isChecked():
-                selected.append(effect)
-        
-        # If nothing selected, default to Static
-        if not selected:
-            selected = ["Static"]
-            self.effect_checkboxes["Static"].setChecked(True)
-        
-        return selected
-    
     def load_preview(self):
         """Load preview image and setup view with saved settings"""
         if self.sample_image:
@@ -637,18 +721,9 @@ class EnhancedSettingsDialog(QDialog):
     
     def save_and_close(self):
         """Save all settings and close"""
-        # Get selected effects
+        # Get selected effects and intensities
         selected_effects = self.get_selected_effects()
-        
-        # Check for conflicts
-        if "Pan Right" in selected_effects and "Pan Left" in selected_effects:
-            QMessageBox.warning(
-                self,
-                "⚠️ Conflicting Effects",
-                "Pan Right and Pan Left cannot be used together.\n\n"
-                "Please uncheck one of them before saving."
-            )
-            return
+        intensities = self.get_effect_intensities()
         
         crop_region = self.crop_view.get_crop_region()
         caption_pos = self.crop_view.get_caption_position()
@@ -682,11 +757,23 @@ class EnhancedSettingsDialog(QDialog):
             'crop_settings': crop_region,
             'caption_position': caption_pos,
             'preview_text': self.sample_text_input.text(),
-            'motion_effects': selected_effects  # Save as list
+            'motion_effects': selected_effects,
+            'motion_effect_intensities': intensities
         })
         
+        # Build effects summary
+        effects_parts = []
+        for effect in selected_effects:
+            if effect == 'Static':
+                effects_parts.append("Static")
+            elif effect in intensities:
+                effects_parts.append(f"{effect} ({intensities[effect]}%)")
+            else:
+                effects_parts.append(effect)
+        
+        effects_str = ", ".join(effects_parts)
+        
         # Show success message
-        effects_str = ", ".join(selected_effects)
         QMessageBox.information(
             self,
             "✅ Settings Saved",

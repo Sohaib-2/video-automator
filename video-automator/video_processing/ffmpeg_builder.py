@@ -1,6 +1,7 @@
 """
 FFmpeg Command Builder
-Constructs complete FFmpeg commands for video assembly with multiple effect support
+Constructs complete FFmpeg commands for video assembly with intensity-controlled effects
+UPDATED: Pass intensities to motion effects
 """
 
 import logging
@@ -68,7 +69,14 @@ class FFmpegCommandBuilder:
             # Convert single string to list
             motion_effects = [motion_effects]
         
+        # Get intensity values
+        intensities = self.settings.get('motion_effect_intensities', {
+            'Noise': 50,
+            'Tilt': 50
+        })
+        
         logger.info(f"Selected motion effects: {', '.join(motion_effects)}")
+        logger.info(f"Effect intensities: {intensities}")
         
         # Start command
         cmd = ['ffmpeg', '-y']
@@ -114,18 +122,19 @@ class FFmpegCommandBuilder:
         concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
         filter_parts.append(concat_filter)
         
-        # Apply VIDEO-LEVEL motion effects AFTER concatenation
+        # Apply VIDEO-LEVEL motion effects AFTER concatenation with intensities
         video_motion_filters = MotionEffectBuilder.build_video_level_filters(
             motion_effects,
             duration,
-            fps
+            fps,
+            intensities  # Pass intensities here
         )
         
         if video_motion_filters:
             # Apply motion effects to concatenated video
             filter_parts.append(f"[vconcat]{video_motion_filters}[vmotion]")
             video_input_for_subtitles = "[vmotion]"
-            logger.info(f"Applied {len(motion_effects)} video-level effect(s)")
+            logger.info(f"Applied {len([e for e in motion_effects if e != 'Static'])} video-level effect(s)")
         else:
             # No motion effects (Static)
             video_input_for_subtitles = "[vconcat]"

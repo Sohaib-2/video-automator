@@ -1,6 +1,7 @@
 """
 Motion Effects Builder
-Generates FFmpeg filter strings for various motion effects with multiple effect support
+Generates FFmpeg filter strings for various motion effects with intensity control
+UPDATED: Only 3 effects - Static, Noise (BIG CHUNKY GRAIN), Tilt
 """
 
 import logging
@@ -18,6 +19,11 @@ class MotionEffectBuilder:
         "Noise",
         "Tilt"
     ]
+    
+    DEFAULT_INTENSITIES = {
+        "Noise": 50,
+        "Tilt": 50
+    }
     
     @staticmethod
     def build_filter(
@@ -119,49 +125,38 @@ class MotionEffectBuilder:
         
         if effect == "Noise":
             # BIG CHUNKY GRAIN like CapCut noise2 filter
-            # Scale intensity: 0-100 maps to grain size
-            # Use geq (generic equation) filter for custom large grain
-            grain_size = int(5 + (intensity / 100.0) * 15)  # 5-20 pixel grain size
-            grain_strength = int(20 + (intensity / 100.0) * 60)  # 20-80 noise strength
+            # Scale intensity: 0-100 maps to grain size and strength
             
-            logger.info(f"Adding BIG GRAIN Noise effect - Intensity: {intensity}%, Size: {grain_size}px")
+            # Grain size: bigger blocks at higher intensity
+            # Range: 4px (subtle) to 20px (very chunky)
+            grain_size = int(4 + (intensity / 100.0) * 16)
             
-            # Create large blocky grain using geq with random noise per block
+            # Grain strength: how much the noise affects the image
+            # Range: 15 (barely visible) to 80 (very strong)
+            grain_strength = int(15 + (intensity / 100.0) * 65)
+            
+            logger.info(f"Adding BIG CHUNKY GRAIN Noise effect - Intensity: {intensity}%, Grain Size: {grain_size}px, Strength: {grain_strength}")
+            
+            # Use geq (generic equation) filter to create large blocky grain
+            # IMPORTANT: Keep original color by using 'p(X,Y)' for cb and cr channels
             return (
                 f"geq=lum='p(X,Y)+(random(0)*{grain_strength}-{grain_strength/2})*"
                 f"(1-mod(X,{grain_size})/(2*{grain_size}))*(1-mod(Y,{grain_size})/(2*{grain_size}))':"
-                f"cb=128:cr=128"
-            )
-        
-        elif effect == "Camera Shake":
-            # Camera shake with adjustable intensity
-            # Scale shake amount based on intensity: 0-100 maps to 0-10px
-            shake_amount = int((intensity / 100.0) * 10)  # 0-10px
-            if shake_amount < 2:
-                shake_amount = 2  # Minimum 2px
-            
-            crop_w = 1920 - (shake_amount * 2)
-            crop_h = 1080 - (shake_amount * 2)
-            
-            logger.info(f"Adding Camera Shake effect - Intensity: {intensity}%, Amount: {shake_amount}px")
-            return (
-                f"crop={crop_w}:{crop_h}:"
-                f"x='{shake_amount}+{shake_amount}*sin(t*3)':"
-                f"y='{shake_amount}+{shake_amount}*cos(t*3)',"
-                f"scale=1920:1080:flags=lanczos"
+                f"cb='p(X,Y)':cr='p(X,Y)'"
             )
         
         elif effect == "Tilt":
             # Tilt/rotation with adjustable intensity
             # Scale tilt angle based on intensity: 0-100 maps to 0-5 degrees
-            tilt_angle = (intensity / 100.0) * 5.0  # 0-5 degrees
-            if tilt_angle < 0.5:
-                tilt_angle = 0.5  # Minimum 0.5 degree
             
-            logger.info(f"Adding Tilt effect - Intensity: {intensity}%, Angle: {tilt_angle:.1f}°")
+            # Tilt angle: subtle at low intensity, more dramatic at high
+            # Range: 0.3° (barely noticeable) to 5° (quite dramatic)
+            tilt_angle = 0.3 + (intensity / 100.0) * 4.7
             
-            # Pre-scale to avoid black edges
-            scale_factor = 1.15  # Scale up 15% to ensure no black edges during rotation
+            logger.info(f"Adding Tilt effect - Intensity: {intensity}%, Max Angle: {tilt_angle:.1f}°")
+            
+            # Pre-scale to avoid black edges during rotation
+            scale_factor = 1.15  # Scale up 15% to ensure no black edges
             return (
                 f"scale={int(1920*scale_factor)}:{int(1080*scale_factor)}:flags=lanczos,"
                 f"rotate='{tilt_angle}*PI/180*sin(t*0.5)':c=none,"
