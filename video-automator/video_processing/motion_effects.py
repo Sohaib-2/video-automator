@@ -31,89 +31,93 @@ class MotionEffectBuilder:
         image_path: Optional[str] = None
     ) -> str:
         """
-        Build FFmpeg filter for motion effect with crop preservation
+        Build FFmpeg filter for per-image processing (crop and scale only)
         
         Args:
-            effect: Motion effect name
+            effect: Motion effect name (not used here, kept for compatibility)
             time_per_image: Duration for each image in seconds
             fps: Frames per second
             crop_settings: Optional crop region {'x', 'y', 'width', 'height'}
             image_path: Path to image file (needed for crop validation)
             
         Returns:
-            FFmpeg filter string
+            FFmpeg filter string for image preparation
         """
-        num_frames = int(time_per_image * fps)
-        
-        # Build base filter with crop handling
+        # Build base filter with crop handling - no motion effects here
         base_filter = MotionEffectBuilder._build_base_filter(
             crop_settings, image_path
         )
         
-        # Apply motion effect
+        # Just apply base filter and fps - motion will be applied at video level
+        return f"{base_filter},fps={fps}"
+    
+    @staticmethod
+    def build_video_level_filter(
+        effect: str,
+        total_duration: float,
+        fps: int
+    ) -> Optional[str]:
+        """
+        Build FFmpeg filter for video-level motion effects
+        Applied to entire concatenated video
+        
+        Args:
+            effect: Motion effect name
+            total_duration: Total video duration in seconds
+            fps: Frames per second
+            
+        Returns:
+            FFmpeg filter string for video-level effect, or None for Static
+        """
         if effect == "Static":
-            return f"{base_filter},fps={fps}"
+            # No effect needed
+            return None
         
         elif effect == "Zoom In":
+            # Zoom in across entire video duration - use time-based formula
+            logger.info(f"Applying video-level Zoom In over {total_duration:.1f}s")
             return (
-                f"{base_filter},"
-                f"zoompan=z='min(zoom+0.001,1.3)':d={num_frames}:s=1920x1080:fps={fps}"
+                f"scale=2496:1404:force_original_aspect_ratio=increase,"
+                f"zoompan=z='min(1.0+0.3*t/{total_duration:.2f},1.3)':s=1920x1080:fps={fps}:d=1"
             )
         
         elif effect == "Zoom Out":
+            # Zoom out across entire video duration - use time-based formula
+            logger.info(f"Applying video-level Zoom Out over {total_duration:.1f}s")
             return (
-                f"{base_filter},"
-                f"zoompan=z='if(eq(on,1),1.3,max(1.0,zoom-0.001))':d={num_frames}:s=1920x1080:fps={fps}"
+                f"scale=2496:1404:force_original_aspect_ratio=increase,"
+                f"zoompan=z='max(1.3-0.3*t/{total_duration:.2f},1.0)':s=1920x1080:fps={fps}:d=1"
             )
         
         elif effect == "Pan Right":
-            if crop_settings:
-                return (
-                    f"{base_filter},"
-                    f"scale=2304:1296,"
-                    f"crop=1920:1080:'min(iw-1920,(iw-1920)*(on/{num_frames}))':0,"
-                    f"fps={fps}"
-                )
-            else:
-                return (
-                    f"scale=2304:1296:force_original_aspect_ratio=increase,"
-                    f"crop=1920:1080:'min(iw-1920,(iw-1920)*(on/{num_frames}))':0,"
-                    f"fps={fps}"
-                )
+            # Pan right across entire video duration
+            logger.info(f"Applying video-level Pan Right over {total_duration:.1f}s")
+            return (
+                f"scale=2304:1296:force_original_aspect_ratio=increase,"
+                f"crop=1920:1080:'min(iw-1920,(iw-1920)*t/{total_duration:.2f})':0"
+            )
         
         elif effect == "Pan Left":
-            if crop_settings:
-                return (
-                    f"{base_filter},"
-                    f"scale=2304:1296,"
-                    f"crop=1920:1080:'(iw-1920)*(1-on/{num_frames})':0,"
-                    f"fps={fps}"
-                )
-            else:
-                return (
-                    f"scale=2304:1296:force_original_aspect_ratio=increase,"
-                    f"crop=1920:1080:'(iw-1920)*(1-on/{num_frames})':0,"
-                    f"fps={fps}"
-                )
+            # Pan left across entire video duration
+            logger.info(f"Applying video-level Pan Left over {total_duration:.1f}s")
+            return (
+                f"scale=2304:1296:force_original_aspect_ratio=increase,"
+                f"crop=1920:1080:'(iw-1920)*max(0,1-t/{total_duration:.2f})':0"
+            )
         
         elif effect == "Ken Burns":
-            if crop_settings:
-                return (
-                    f"{base_filter},"
-                    f"scale=2304:1296,"
-                    f"zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                    f"d={num_frames}:s=1920x1080:fps={fps}"
-                )
-            else:
-                return (
-                    f"scale=2304:1296:force_original_aspect_ratio=increase,"
-                    f"zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                    f"d={num_frames}:s=1920x1080:fps={fps}"
-                )
+            # Ken Burns effect across entire video duration
+            logger.info(f"Applying video-level Ken Burns over {total_duration:.1f}s")
+            return (
+                f"scale=2496:1404:force_original_aspect_ratio=increase,"
+                f"zoompan=z='min(1.0+0.5*t/{total_duration:.2f},1.5)':"
+                f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                f"s=1920x1080:fps={fps}:d=1"
+            )
         
         else:
-            logger.warning(f"Unknown motion effect: {effect}, using Static")
-            return f"{base_filter},fps={fps}"
+            logger.warning(f"Unknown motion effect: {effect}, no effect applied")
+            return None
     
     @staticmethod
     def _build_base_filter(
@@ -148,19 +152,28 @@ class MotionEffectBuilder:
                 logger.warning(f"Invalid crop coordinates: {crop_settings}. Using default auto-crop.")
                 return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
             
+            # CRITICAL FIX: Clamp crop dimensions to image boundaries BEFORE using
+            if crop_x >= img_w or crop_y >= img_h:
+                logger.warning(f"Crop position ({crop_x},{crop_y}) outside image {img_w}x{img_h}. Using default.")
+                return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
+            
             # Adjust if crop exceeds boundaries
-            if crop_x + crop_w > img_w or crop_y + crop_h > img_h:
-                logger.warning(
-                    f"Crop region {crop_w}x{crop_h} at ({crop_x},{crop_y}) "
-                    f"exceeds image dimensions {img_w}x{img_h}"
-                )
-                crop_w = min(crop_w, img_w - crop_x)
-                crop_h = min(crop_h, img_h - crop_y)
-                logger.info(f"Adjusted crop to: {crop_w}x{crop_h} at ({crop_x},{crop_y})")
+            if crop_x + crop_w > img_w:
+                crop_w = img_w - crop_x
+                logger.warning(f"Crop width adjusted to {crop_w} to fit image width {img_w}")
+            
+            if crop_y + crop_h > img_h:
+                crop_h = img_h - crop_y
+                logger.warning(f"Crop height adjusted to {crop_h} to fit image height {img_h}")
+            
+            # Ensure minimum size
+            if crop_w < 100 or crop_h < 100:
+                logger.warning(f"Crop too small ({crop_w}x{crop_h}). Using default.")
+                return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
             
             # Build exact crop→scale filter
             filter_str = f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale=1920:1080:flags=lanczos"
-            logger.info(f"Using custom crop: {crop_w}x{crop_h} at ({crop_x},{crop_y})")
+            logger.info(f"Using custom crop: {crop_w}x{crop_h} at ({crop_x},{crop_y}) from {img_w}x{img_h}")
             logger.info("EXACT MATCH: Preview composition will be preserved in video")
             
             return filter_str

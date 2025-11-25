@@ -57,7 +57,7 @@ class FFmpegCommandBuilder:
         subtitle_style = style_builder.build()
         
         motion_effect = self.settings.get('motion_effect', 'Zoom In')
-        logger.info(f"Applying motion effect: {motion_effect}")
+        logger.info(f"Applying VIDEO-LEVEL motion effect: {motion_effect}")
         
         # Start command
         cmd = ['ffmpeg', '-y']
@@ -87,27 +87,44 @@ class FFmpegCommandBuilder:
         # Build filter complex
         filter_parts = []
         
-        # Process each image with motion effect
+        # Process each image - NO motion effects, just crop/scale
         for i, img_path in enumerate(images):
-            motion_filter = MotionEffectBuilder.build_filter(
-                motion_effect,
+            image_filter = MotionEffectBuilder.build_filter(
+                motion_effect,  # Not used in new version
                 time_per_image,
                 fps,
                 crop_settings,
                 img_path
             )
-            filter_parts.append(f"[{i}:v]{motion_filter}[v{i}]")
+            filter_parts.append(f"[{i}:v]{image_filter}[v{i}]")
         
         # Concatenate video streams
         concat_inputs = ''.join([f"[v{i}]" for i in range(num_images)])
         concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
         filter_parts.append(concat_filter)
         
-        # Add subtitles
+        # Apply VIDEO-LEVEL motion effect AFTER concatenation
+        video_motion_filter = MotionEffectBuilder.build_video_level_filter(
+            motion_effect,
+            duration,
+            fps
+        )
+        
+        if video_motion_filter:
+            # Apply motion effect to concatenated video
+            filter_parts.append(f"[vconcat]{video_motion_filter}[vmotion]")
+            video_input_for_subtitles = "[vmotion]"
+            logger.info(f"Applied video-level {motion_effect} effect to entire video")
+        else:
+            # No motion effect (Static)
+            video_input_for_subtitles = "[vconcat]"
+            logger.info("No motion effect applied (Static)")
+        
+        # Add subtitles to the final video stream
         srt_path_normalized = srt_path.replace('\\', '/')
         srt_path_escaped = srt_path_normalized.replace(':', r'\:').replace("'", r"'\''")
         
-        subtitle_filter = f"[vconcat]subtitles='{srt_path_escaped}':force_style='{subtitle_style}'[vout]"
+        subtitle_filter = f"{video_input_for_subtitles}subtitles='{srt_path_escaped}':force_style='{subtitle_style}'[vout]"
         filter_parts.append(subtitle_filter)
         
         logger.info(f"Subtitle SRT: {srt_path}")
