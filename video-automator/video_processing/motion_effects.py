@@ -15,8 +15,6 @@ class MotionEffectBuilder:
     
     SUPPORTED_EFFECTS = [
         "Static",
-        "Pan Right",
-        "Pan Left",
         "Noise",
         "Camera Shake",
         "Tilt"
@@ -55,20 +53,25 @@ class MotionEffectBuilder:
     def build_video_level_filters(
         effects: List[str],
         total_duration: float,
-        fps: int
+        fps: int,
+        intensities: Optional[Dict[str, int]] = None
     ) -> Optional[str]:
         """
-        Build FFmpeg filters for multiple video-level motion effects
+        Build FFmpeg filters for multiple video-level motion effects with intensity control
         Applied to entire concatenated video
         
         Args:
             effects: List of motion effect names
             total_duration: Total video duration in seconds
             fps: Frames per second
+            intensities: Dict mapping effect name to intensity (0-100)
             
         Returns:
             Combined FFmpeg filter string for video-level effects, or None for Static only
         """
+        if intensities is None:
+            intensities = {}
+        
         # Remove "Static" from effects list if present
         active_effects = [e for e in effects if e != "Static"]
         
@@ -79,8 +82,9 @@ class MotionEffectBuilder:
         filter_chain = []
         
         for effect in active_effects:
+            intensity = intensities.get(effect, 50)  # Default 50% intensity
             effect_filter = MotionEffectBuilder._build_single_effect(
-                effect, total_duration, fps
+                effect, total_duration, fps, intensity
             )
             if effect_filter:
                 filter_chain.append(effect_filter)
@@ -98,60 +102,71 @@ class MotionEffectBuilder:
     def _build_single_effect(
         effect: str,
         total_duration: float,
-        fps: int
+        fps: int,
+        intensity: int = 50
     ) -> Optional[str]:
         """
-        Build single effect filter
+        Build single effect filter with intensity control
         
         Args:
             effect: Motion effect name
             total_duration: Total video duration in seconds
             fps: Frames per second
+            intensity: Effect intensity from 0-100 (50 = default)
             
         Returns:
             FFmpeg filter string for single effect
         """
-        if effect == "Pan Right":
-            # Pan right across entire video duration
-            logger.info(f"Adding Pan Right effect over {total_duration:.1f}s")
-            return (
-                f"scale=2304:1296:force_original_aspect_ratio=increase,"
-                f"crop=1920:1080:'min(iw-1920,(iw-1920)*t/{total_duration:.2f})':0"
-            )
         
-        elif effect == "Pan Left":
-            # Pan left across entire video duration
-            logger.info(f"Adding Pan Left effect over {total_duration:.1f}s")
+        if effect == "Noise":
+            # BIG CHUNKY GRAIN like CapCut noise2 filter
+            # Scale intensity: 0-100 maps to grain size
+            # Use geq (generic equation) filter for custom large grain
+            grain_size = int(5 + (intensity / 100.0) * 15)  # 5-20 pixel grain size
+            grain_strength = int(20 + (intensity / 100.0) * 60)  # 20-80 noise strength
+            
+            logger.info(f"Adding BIG GRAIN Noise effect - Intensity: {intensity}%, Size: {grain_size}px")
+            
+            # Create large blocky grain using geq with random noise per block
             return (
-                f"scale=2304:1296:force_original_aspect_ratio=increase,"
-                f"crop=1920:1080:'(iw-1920)*max(0,1-t/{total_duration:.2f})':0"
+                f"geq=lum='p(X,Y)+(random(0)*{grain_strength}-{grain_strength/2})*"
+                f"(1-mod(X,{grain_size})/(2*{grain_size}))*(1-mod(Y,{grain_size})/(2*{grain_size}))':"
+                f"cb=128:cr=128"
             )
-        
-        elif effect == "Noise":
-            # Add film grain/noise effect
-            # alls: noise intensity (0-100), allf: noise flags (t=temporal, u=uniform)
-            logger.info("Adding Noise effect (film grain) - HIGH INTENSITY")
-            return "noise=alls=65:allf=t+u"  # Increased from 45 to 65 for very visible noise
         
         elif effect == "Camera Shake":
-            # Camera shake using random movement - SUBTLE
-            # Shake intensity: 5px movement (reduced), frequency: 3Hz (slow)
-            logger.info("Adding Camera Shake effect - SUBTLE & SLOW")
+            # Camera shake with adjustable intensity
+            # Scale shake amount based on intensity: 0-100 maps to 0-10px
+            shake_amount = int((intensity / 100.0) * 10)  # 0-10px
+            if shake_amount < 2:
+                shake_amount = 2  # Minimum 2px
+            
+            crop_w = 1920 - (shake_amount * 2)
+            crop_h = 1080 - (shake_amount * 2)
+            
+            logger.info(f"Adding Camera Shake effect - Intensity: {intensity}%, Amount: {shake_amount}px")
             return (
-                f"crop=1910:1070:"  # Smaller crop for less shake (was 1900:1060)
-                f"x='5+5*sin(t*3)':"  # Reduced from 10px to 5px amplitude
-                f"y='5+5*cos(t*3)',"  # Reduced from 10px to 5px amplitude
+                f"crop={crop_w}:{crop_h}:"
+                f"x='{shake_amount}+{shake_amount}*sin(t*3)':"
+                f"y='{shake_amount}+{shake_amount}*cos(t*3)',"
                 f"scale=1920:1080:flags=lanczos"
             )
         
         elif effect == "Tilt":
-            # Tilt/rotation effect - gentle left-right tilting
-            # Rotates the video smoothly left and right
-            logger.info("Adding Tilt effect (left-right rotation)")
+            # Tilt/rotation with adjustable intensity
+            # Scale tilt angle based on intensity: 0-100 maps to 0-5 degrees
+            tilt_angle = (intensity / 100.0) * 5.0  # 0-5 degrees
+            if tilt_angle < 0.5:
+                tilt_angle = 0.5  # Minimum 0.5 degree
+            
+            logger.info(f"Adding Tilt effect - Intensity: {intensity}%, Angle: {tilt_angle:.1f}°")
+            
+            # Pre-scale to avoid black edges
+            scale_factor = 1.15  # Scale up 15% to ensure no black edges during rotation
             return (
-                f"rotate='2*PI/180*sin(t*0.5)':"  # 2 degree tilt, 0.5Hz frequency (very slow)
-                f"c=black:ow=rotw(2*PI/180):oh=roth(2*PI/180),"
-                f"scale=1920:1080:flags=lanczos"
+                f"scale={int(1920*scale_factor)}:{int(1080*scale_factor)}:flags=lanczos,"
+                f"rotate='{tilt_angle}*PI/180*sin(t*0.5)':c=none,"
+                f"crop=1920:1080:(iw-1920)/2:(ih-1080)/2"
             )
         
         else:
