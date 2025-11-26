@@ -105,11 +105,17 @@ class MotionEffectBuilder:
                     # Regular filter string
                     filter_chain.append(effect_filter)
         
-        # Return video overlay if present (takes priority)
+        # NEW: Return BOTH video overlay AND filters if both present
+        if video_overlay_result and filter_chain:
+            # Combine them with special separator
+            combined_filters = ",".join(filter_chain)
+            result = f"{video_overlay_result}|FILTERS|{combined_filters}"
+            logger.info(f"Combining video overlay + {len(filter_chain)} other effect(s)")
+            return result
+        
+        # Return video overlay alone if present
         if video_overlay_result:
-            if filter_chain:
-                logger.warning(f"Video overlay + other effects detected. Only overlay will be applied. Other effects: {filter_chain}")
-            logger.info(f"Returning video overlay instruction")
+            logger.info(f"Returning video overlay instruction (no other filters)")
             return video_overlay_result
         
         # Return combined filters if no overlay
