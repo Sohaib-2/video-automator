@@ -1,6 +1,7 @@
 """
-Caption Generator
-Creates SRT subtitle files from caption data with smart sentence splitting
+Caption Generator - IMPROVED
+Creates SRT subtitle files with smart sentence splitting using HYBRID approach
+Combines word limits + character limits + FFmpeg auto-wrapping safety net
 """
 
 import logging
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class CaptionGenerator:
-    """Handles SRT subtitle file generation"""
+    """Handles SRT subtitle file generation with intelligent wrapping"""
     
     @staticmethod
     def format_timestamp(seconds: float) -> str:
@@ -31,16 +32,23 @@ class CaptionGenerator:
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
     
     @staticmethod
-    def split_into_shorter_segments(captions: List[Dict], max_words: int = 8) -> List[Dict]:
+    def split_into_shorter_segments(captions: List[Dict], max_words: int = 6, max_chars: int = 50) -> List[Dict]:
         """
-        Split long captions into shorter segments to prevent multi-line wrapping
+        HYBRID APPROACH: Split long captions with word AND character limits
+        
+        This prevents both:
+        - Long sentences from overflowing (word limit)
+        - Individual long words from going off-screen (char limit)
+        
+        FFmpeg will still auto-wrap within these segments as a safety net.
         
         Args:
             captions: List of caption dictionaries with 'start', 'end', 'text'
-            max_words: Maximum words per caption segment
+            max_words: Maximum words per caption segment (default: 6 = ~2 lines max)
+            max_chars: Maximum characters per caption (safety for long words)
             
         Returns:
-            List of split caption segments
+            List of optimally-split caption segments
         """
         result = []
         
@@ -49,30 +57,62 @@ class CaptionGenerator:
             words = text.split()
             duration = caption['end'] - caption['start']
             
-            # If caption is short enough, keep as is
-            if len(words) <= max_words:
+            # Quick check: Does it already fit nicely?
+            if len(words) <= max_words and len(text) <= max_chars:
+                result.append(caption)
+                logger.debug(f"✓ Caption OK: '{text}' ({len(words)} words, {len(text)} chars)")
+                continue
+            
+            # Need to split - build chunks with BOTH limits
+            chunks = []
+            current_chunk = []
+            current_length = 0
+            
+            for word in words:
+                word_length = len(word)
+                
+                # Calculate what would happen if we add this word
+                would_exceed_words = len(current_chunk) >= max_words
+                would_exceed_chars = (current_length + word_length + 1) > max_chars  # +1 for space
+                
+                # Check for natural breaking points (punctuation)
+                is_natural_break = word.endswith((',', '.', '!', '?', ';', ':'))
+                near_word_limit = len(current_chunk) >= max_words // 2  # At least halfway
+                
+                # Decide: Should we break here?
+                should_break = (
+                    would_exceed_words or 
+                    would_exceed_chars or 
+                    (is_natural_break and near_word_limit)
+                )
+                
+                if should_break and current_chunk:
+                    # Finalize current chunk
+                    chunk_text = ' '.join(current_chunk)
+                    chunks.append(chunk_text)
+                    logger.debug(f"  → Chunk: '{chunk_text}' ({len(current_chunk)} words, {len(chunk_text)} chars)")
+                    
+                    # Start new chunk
+                    current_chunk = []
+                    current_length = 0
+                
+                # Add word to current chunk
+                current_chunk.append(word)
+                current_length += word_length + 1  # +1 for space between words
+            
+            # Don't forget the last chunk!
+            if current_chunk:
+                chunk_text = ' '.join(current_chunk)
+                chunks.append(chunk_text)
+                logger.debug(f"  → Chunk: '{chunk_text}' ({len(current_chunk)} words, {len(chunk_text)} chars)")
+            
+            # Safety check
+            if not chunks:
+                logger.warning(f"⚠ No chunks created for: '{text}' - using original")
                 result.append(caption)
                 continue
             
-            # Split into chunks
-            chunks = []
-            current_chunk = []
-            
-            for word in words:
-                current_chunk.append(word)
-                
-                # Split at natural breaks (commas, periods) or at max_words
-                if len(current_chunk) >= max_words or (
-                    word.endswith((',', '.', '!', '?')) and len(current_chunk) >= max_words // 2
-                ):
-                    chunks.append(' '.join(current_chunk))
-                    current_chunk = []
-            
-            # Add remaining words
-            if current_chunk:
-                chunks.append(' '.join(current_chunk))
-            
-            # Create new caption segments with proportional timing
+            # Distribute timing evenly across chunks
             num_chunks = len(chunks)
             time_per_chunk = duration / num_chunks
             
@@ -82,25 +122,32 @@ class CaptionGenerator:
                     'end': caption['start'] + ((i + 1) * time_per_chunk),
                     'text': chunk
                 })
-                logger.debug(f"Split caption into {num_chunks} segments: '{chunk[:30]}...'")
+            
+            logger.info(f"✂ Split: '{text[:40]}...' → {num_chunks} segments")
         
+        logger.info(f"📊 Caption splitting: {len(captions)} original → {len(result)} final segments")
         return result
     
     @staticmethod
-    def create_srt_file(captions: List[Dict], output_path: str, split_long: bool = True, max_words: int = 8):
+    def create_srt_file(captions: List[Dict], output_path: str, split_long: bool = True, max_words: int = 6, max_chars: int = 50):
         """
-        Create SRT subtitle file from captions
+        Create SRT subtitle file from captions with intelligent splitting
         
         Args:
             captions: List of caption dictionaries with 'start', 'end', 'text'
             output_path: Path where SRT file will be saved
-            split_long: Whether to split long captions into shorter segments
-            max_words: Maximum words per caption when splitting
+            split_long: Whether to split long captions (RECOMMENDED: True)
+            max_words: Maximum words per caption (default: 6)
+            max_chars: Maximum characters per caption (default: 50)
         """
-        # Split long captions if enabled
+        # Apply smart splitting if enabled
         if split_long:
-            captions = CaptionGenerator.split_into_shorter_segments(captions, max_words)
+            logger.info("🔧 Applying HYBRID caption splitting (word + char limits)...")
+            captions = CaptionGenerator.split_into_shorter_segments(captions, max_words, max_chars)
+        else:
+            logger.warning("⚠ Caption splitting disabled - long captions may overflow!")
         
+        # Write SRT file
         with open(output_path, 'w', encoding='utf-8') as f:
             for i, caption in enumerate(captions, 1):
                 start_time = CaptionGenerator.format_timestamp(caption['start'])
@@ -110,7 +157,9 @@ class CaptionGenerator:
                 f.write(f"{start_time} --> {end_time}\n")
                 f.write(f"{caption['text']}\n\n")
         
-        logger.info(f"SRT file created: {output_path} ({len(captions)} captions)")
+        logger.info(f"✅ SRT file created: {output_path} ({len(captions)} caption segments)")
         
+        # Log sample
         if captions:
-            logger.info(f"Sample caption: '{captions[0]['text']}' at {captions[0]['start']:.2f}s")
+            sample = captions[0]
+            logger.info(f"📝 Sample: '{sample['text']}' @ {sample['start']:.2f}s ({len(sample['text'])} chars)")

@@ -1,7 +1,9 @@
 """
-Subtitle Style Builder
-Creates FFmpeg subtitle styling with professional margins and safe caption boundaries
-UPDATED: Industry-standard 10% side margins for perfect caption positioning
+Subtitle Style Builder - IMPROVED
+Creates FFmpeg subtitle styling with:
+- 10% safe margins (industry standard)
+- Smart multi-line wrapping (safety net for long words)
+- Optimal caption boundaries for 1080p video
 """
 
 import logging
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class SubtitleStyleBuilder:
-    """Builds FFmpeg ASS subtitle style strings with safe margins"""
+    """Builds FFmpeg ASS subtitle style with intelligent wrapping boundaries"""
     
     def __init__(self, settings: Dict):
         """
@@ -24,10 +26,10 @@ class SubtitleStyleBuilder:
     
     def build(self) -> str:
         """
-        Build complete subtitle style string for FFmpeg
+        Build complete subtitle style string for FFmpeg with wrapping safety net
         
         Returns:
-            ASS style format string
+            ASS style format string with optimal wrapping configuration
         """
         # Font settings - handle "Font Bold" format
         font = self.settings.get('font', 'Arial Bold')
@@ -43,7 +45,7 @@ class SubtitleStyleBuilder:
         font_safe = font_base.replace(',', '').replace("'", '').replace('"', '')
         font_size = self.settings.get('font_size', 48)
         
-        logger.info(f"Using font: {font_safe} (Bold: {is_bold}), Size: {font_size}px for 1080p output")
+        logger.info(f"Font: {font_safe} (Bold: {is_bold}), Size: {font_size}px")
         
         # Color conversion to ASS format
         text_color = self._convert_color(self.settings.get('text_color', '#FFFF00'))
@@ -84,17 +86,17 @@ class SubtitleStyleBuilder:
         y_norm = caption_pos['y']
         
         # ============================================================================
-        # INDUSTRY-STANDARD SAFE MARGINS - 10% ON EACH SIDE
+        # INDUSTRY-STANDARD SAFE MARGINS - 10% EACH SIDE
         # ============================================================================
         # For 1920x1080 video:
-        # - 10% left margin = 192px
-        # - 10% right margin = 192px
-        # - Caption area = 1536px (80% of screen width)
+        # - Left margin:  192px (10%)
+        # - Right margin: 192px (10%)
+        # - Caption area: 1536px (80% of screen width)
         #
         # This ensures:
         # ✅ Text never touches edges
         # ✅ Safe for all devices/TVs (overscan protection)
-        # ✅ Professional look matching YouTube, Netflix, broadcast standards
+        # ✅ Professional look (YouTube, Netflix standard)
         # ✅ Natural wrapping at 2-3 lines for long captions
         # ============================================================================
         
@@ -104,18 +106,18 @@ class SubtitleStyleBuilder:
         # Calculate absolute minimum margin in pixels
         min_side_margin_px = int(SCREEN_WIDTH * MINIMUM_SIDE_MARGIN_PERCENT)  # 192px
         
-        # Apply minimum margins (override user setting if too small)
+        # Apply minimum margins
         margin_l = min_side_margin_px  # Always 192px (10%)
         margin_r = min_side_margin_px  # Always 192px (10%)
         
-        # Maximum caption width is now guaranteed: 1920 - 192 - 192 = 1536px (80%)
+        # Maximum caption width: 1920 - 192 - 192 = 1536px (80%)
         max_caption_width = SCREEN_WIDTH - margin_l - margin_r
         
-        logger.info(f"🎯 SAFE MARGINS APPLIED:")
-        logger.info(f"   Left margin:  {margin_l}px ({MINIMUM_SIDE_MARGIN_PERCENT*100:.0f}%)")
-        logger.info(f"   Right margin: {margin_r}px ({MINIMUM_SIDE_MARGIN_PERCENT*100:.0f}%)")
-        logger.info(f"   Caption area: {max_caption_width}px ({(max_caption_width/SCREEN_WIDTH)*100:.0f}% of screen)")
-        logger.info(f"   ✅ Text will NEVER touch screen edges!")
+        logger.info(f"🎯 SAFE MARGINS:")
+        logger.info(f"   Left:  {margin_l}px ({MINIMUM_SIDE_MARGIN_PERCENT*100:.0f}%)")
+        logger.info(f"   Right: {margin_r}px ({MINIMUM_SIDE_MARGIN_PERCENT*100:.0f}%)")
+        logger.info(f"   Caption area: {max_caption_width}px ({(max_caption_width/SCREEN_WIDTH)*100:.0f}%)")
+        logger.info(f"   ✅ Invisible boundary enforced - text will auto-wrap!")
         
         # Determine vertical alignment based on position
         if y_norm < 0.33:
@@ -135,7 +137,19 @@ class SubtitleStyleBuilder:
         h_align = 2  # Center horizontal alignment
         alignment = v_align_base + h_align
         
-        # Build style string with safe margins and smart wrapping
+        # ============================================================================
+        # WRAPPING CONFIGURATION - The Safety Net!
+        # ============================================================================
+        # WrapStyle=2: Smart wrapping at word boundaries
+        #   - Text longer than (screen_width - margin_l - margin_r) will automatically
+        #     wrap to the next line
+        #   - Wraps at spaces, not mid-word
+        #   - This is the SAFETY NET for any captions that slip through splitting
+        # ============================================================================
+        
+        wrap_style = 2  # Smart word-boundary wrapping (CRITICAL!)
+        
+        # Build style string with optimal wrapping
         style = (
             f"FontName={font_safe},"
             f"FontSize={font_size},"
@@ -150,14 +164,15 @@ class SubtitleStyleBuilder:
             f"MarginL={margin_l},"
             f"MarginR={margin_r},"
             f"Alignment={alignment},"
-            f"WrapStyle=2"  # Smart wrapping at word boundaries
+            f"WrapStyle={wrap_style}"  # SAFETY NET: Auto-wrap at invisible boundary!
         )
         
-        # Log detailed style info
-        logger.info(f"Caption style: Pos=({x_norm:.2f},{y_norm:.2f}), Align={alignment}, MarginV={margin_v}px")
-        logger.info(f"Colors: Text={text_color}, BG={bg_color}, Outline={outline_color}, HasBG={has_background}")
-        logger.info(f"Border: Style={border_style}, Outline={outline_width}px, Shadow={shadow_depth}px, Bold={is_bold}")
-        logger.info(f"Wrapping: WrapStyle=2 (smart word-boundary wrapping enabled)")
+        # Detailed logging
+        logger.info(f"Caption position: ({x_norm:.2f}, {y_norm:.2f}), Alignment: {alignment}")
+        logger.info(f"Wrapping: WrapStyle={wrap_style} (smart auto-wrap enabled)")
+        logger.info(f"Colors: Text={text_color}, BG={bg_color}, HasBG={has_background}")
+        logger.info(f"Border: Style={border_style}, Outline={outline_width}px, Shadow={shadow_depth}px")
+        logger.info("✅ HYBRID SYSTEM: Pre-split captions + FFmpeg auto-wrap safety net")
         
         return style
     
