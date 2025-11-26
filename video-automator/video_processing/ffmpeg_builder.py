@@ -1,7 +1,7 @@
 """
 FFmpeg Command Builder
 Constructs complete FFmpeg commands for video assembly with intensity-controlled effects
-UPDATED: Pass intensities to motion effects
+UPDATED: Support for video overlay effects (real grain video files)
 """
 
 import logging
@@ -103,6 +103,54 @@ class FFmpegCommandBuilder:
         # Add audio input
         cmd.extend(['-i', files['voiceover']])
         
+        # Build motion effects and detect video overlay
+        video_motion_result = MotionEffectBuilder.build_video_level_filters(
+            motion_effects,
+            duration,
+            fps,
+            intensities
+        )
+        
+        # Check for video overlay instructions (grain overlay)
+        has_video_overlay = False
+        video_overlay_info = None
+        video_motion_filters = None
+        grain_input_index = None
+        
+        if video_motion_result:
+            if isinstance(video_motion_result, str) and video_motion_result.startswith("VIDEO_OVERLAY:"):
+                # Parse video overlay instructions: VIDEO_OVERLAY:path:opacity:duration
+                # This should be clean now (not combined with other filters)
+                has_video_overlay = True
+                parts = video_motion_result.split(":")
+                
+                if len(parts) < 4:
+                    logger.error(f"Invalid VIDEO_OVERLAY format: {video_motion_result}")
+                    logger.warning("Skipping video overlay due to parse error")
+                else:
+                    video_overlay_info = {
+                        'path': parts[1],
+                        'opacity': float(parts[2]),
+                        'duration': float(parts[3])
+                    }
+                
+                # Add grain video input with looping
+                grain_input_index = num_images + 1  # After all images and audio
+                grain_path = video_overlay_info['path']
+                
+                cmd.extend([
+                    '-stream_loop', '-1',  # Loop the grain video indefinitely
+                    '-i', grain_path,      # Input grain video
+                    '-t', str(duration)    # Limit to match main video duration
+                ])
+                
+                logger.info(f"✨ Added REAL GRAIN OVERLAY: {grain_path} at index {grain_input_index}")
+                logger.info(f"   Opacity: {video_overlay_info['opacity']:.2f} | Duration: {duration:.2f}s")
+                
+            else:
+                # Normal filter string (Tilt, etc)
+                video_motion_filters = video_motion_result
+        
         # Build filter complex
         filter_parts = []
         
@@ -122,21 +170,37 @@ class FFmpegCommandBuilder:
         concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
         filter_parts.append(concat_filter)
         
-        # Apply VIDEO-LEVEL motion effects AFTER concatenation with intensities
-        video_motion_filters = MotionEffectBuilder.build_video_level_filters(
-            motion_effects,
-            duration,
-            fps,
-            intensities  # Pass intensities here
-        )
-        
-        if video_motion_filters:
-            # Apply motion effects to concatenated video
+        # Apply VIDEO-LEVEL effects AFTER concatenation
+        if has_video_overlay:
+            # GRAIN OVERLAY: Scale grain video, apply opacity, overlay on main
+            opacity = video_overlay_info['opacity']
+            
+            # Prepare grain overlay stream
+            grain_filter = (
+                f"[{grain_input_index}:v]"
+                f"scale=1920:1080:force_original_aspect_ratio=increase,"
+                f"crop=1920:1080,"
+                f"format=rgba,"
+                f"colorchannelmixer=aa={opacity}"
+                f"[grain]"
+            )
+            filter_parts.append(grain_filter)
+            
+            # Blend grain over main video
+            overlay_filter = f"[vconcat][grain]overlay[vmotion]"
+            filter_parts.append(overlay_filter)
+            
+            video_input_for_subtitles = "[vmotion]"
+            logger.info(f"🎬 Applied REAL GRAIN overlay with {opacity:.2f} opacity")
+            
+        elif video_motion_filters:
+            # OTHER MOTION EFFECTS (Tilt, etc)
             filter_parts.append(f"[vconcat]{video_motion_filters}[vmotion]")
             video_input_for_subtitles = "[vmotion]"
-            logger.info(f"Applied {len([e for e in motion_effects if e != 'Static'])} video-level effect(s)")
+            logger.info(f"Applied {len([e for e in motion_effects if e != 'Static'])} motion effect(s)")
+            
         else:
-            # No motion effects (Static)
+            # NO MOTION EFFECTS (Static)
             video_input_for_subtitles = "[vconcat]"
             logger.info("No motion effects applied (Static)")
         
@@ -157,7 +221,7 @@ class FFmpegCommandBuilder:
         
         # Map outputs
         cmd.extend(['-map', '[vout]'])
-        cmd.extend(['-map', f'{num_images}:a'])
+        cmd.extend(['-map', f'{num_images}:a'])  # Audio from original position
         
         # Bitrate calculation - adjust based on effects
         has_motion = any(e != "Static" for e in motion_effects)

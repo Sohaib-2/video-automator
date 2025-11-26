@@ -1,7 +1,7 @@
 """
 Motion Effects Builder
 Generates FFmpeg filter strings for various motion effects with intensity control
-UPDATED: Only 3 effects - Static, Noise (BIG CHUNKY GRAIN), Tilt
+UPDATED: Only 3 effects - Static, Noise (BIG CHUNKY RANDOM GRAIN), Tilt
 """
 
 import logging
@@ -84,6 +84,8 @@ class MotionEffectBuilder:
             logger.info("No motion effects selected (Static)")
             return None
         
+        # Separate video overlay effects from filter effects
+        video_overlay_result = None
         filter_chain = []
         
         for effect in active_effects:
@@ -91,15 +93,32 @@ class MotionEffectBuilder:
             effect_filter = MotionEffectBuilder._build_single_effect(
                 effect, total_duration, fps, intensity
             )
+            
             if effect_filter:
-                filter_chain.append(effect_filter)
+                # Check if this is a video overlay instruction
+                if isinstance(effect_filter, str) and effect_filter.startswith("VIDEO_OVERLAY:"):
+                    if video_overlay_result is None:
+                        video_overlay_result = effect_filter
+                    else:
+                        logger.warning(f"Multiple video overlays detected, using first one only")
+                else:
+                    # Regular filter string
+                    filter_chain.append(effect_filter)
         
+        # Return video overlay if present (takes priority)
+        if video_overlay_result:
+            if filter_chain:
+                logger.warning(f"Video overlay + other effects detected. Only overlay will be applied. Other effects: {filter_chain}")
+            logger.info(f"Returning video overlay instruction")
+            return video_overlay_result
+        
+        # Return combined filters if no overlay
         if not filter_chain:
             return None
         
         # Combine filters with comma separator
         combined = ",".join(filter_chain)
-        logger.info(f"Applied {len(filter_chain)} video-level effect(s): {', '.join(active_effects)}")
+        logger.info(f"Applied {len(filter_chain)} video-level effect(s): {', '.join([e for e in active_effects if e != 'Noise'])}")
         
         return combined
     
@@ -124,26 +143,31 @@ class MotionEffectBuilder:
         """
         
         if effect == "Noise":
-            # BIG CHUNKY GRAIN like CapCut noise2 filter
-            # Scale intensity: 0-100 maps to grain size and strength
+            # REAL FILM GRAIN OVERLAY - Uses actual noise2.mp4 video file
+            # This is how CapCut does it - overlay real grain footage!
             
-            # Grain size: bigger blocks at higher intensity
-            # Range: 4px (subtle) to 20px (very chunky)
-            grain_size = int(4 + (intensity / 100.0) * 16)
+            # Opacity based on intensity: 0-100% maps to 0.1-0.5 alpha
+            # Range: 0.1 (10% - very subtle) to 0.5 (50% - strong)
+            opacity = 0.1 + (intensity / 100.0) * 0.4
             
-            # Grain strength: how much the noise affects the image
-            # Range: 15 (barely visible) to 80 (very strong)
-            grain_strength = int(15 + (intensity / 100.0) * 65)
+            logger.info(f"Adding REAL FILM GRAIN overlay - Intensity: {intensity}%, Opacity: {opacity:.2f}")
             
-            logger.info(f"Adding BIG CHUNKY GRAIN Noise effect - Intensity: {intensity}%, Grain Size: {grain_size}px, Strength: {grain_strength}")
+            # Path to grain overlay video (3 second loop)
+            grain_video_path = "video-automator/resources/noise2.mp4"
             
-            # Use geq (generic equation) filter to create large blocky grain
-            # IMPORTANT: Keep original color by using 'p(X,Y)' for cb and cr channels
-            return (
-                f"geq=lum='p(X,Y)+(random(0)*{grain_strength}-{grain_strength/2})*"
-                f"(1-mod(X,{grain_size})/(2*{grain_size}))*(1-mod(Y,{grain_size})/(2*{grain_size}))':"
-                f"cb='p(X,Y)':cr='p(X,Y)'"
-            )
+            # Check if grain overlay exists
+            import os
+            if not os.path.exists(grain_video_path):
+                logger.error(f"Grain overlay not found at: {grain_video_path}")
+                logger.warning("Skipping noise effect - file missing")
+                return None
+            
+            logger.info(f"Using grain overlay: {grain_video_path}")
+            
+            # Return special marker + instructions for video overlay
+            # FFmpegCommandBuilder will handle this specially
+            return f"VIDEO_OVERLAY:{grain_video_path}:{opacity}:{total_duration}"
+        
         
         elif effect == "Tilt":
             # Tilt/rotation with adjustable intensity
