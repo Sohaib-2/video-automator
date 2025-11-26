@@ -97,7 +97,7 @@ class MotionEffectBuilder:
             
             if effect_filter:
                 # Check if this is a video overlay instruction
-                if isinstance(effect_filter, str) and effect_filter.startswith("VIDEO_OVERLAY:"):
+                if isinstance(effect_filter, str) and effect_filter.startswith("VIDEO_OVERLAY|"):
                     if video_overlay_result is None:
                         video_overlay_result = effect_filter
                     else:
@@ -171,9 +171,13 @@ class MotionEffectBuilder:
             
             logger.info(f"Using grain overlay: {grain_video_path}")
             
+            # Normalize path for cross-platform compatibility
+            grain_video_path_normalized = grain_video_path.replace('\\', '/')
+            
             # Return special marker + instructions for video overlay
             # FFmpegCommandBuilder will handle this specially
-            return f"VIDEO_OVERLAY:{grain_video_path}:{opacity}:{total_duration}"
+            # Use | delimiter to avoid conflicts with Windows drive letters (C:)
+            return f"VIDEO_OVERLAY|{grain_video_path_normalized}|{opacity}|{total_duration}"
         
         
         elif effect == "Tilt":

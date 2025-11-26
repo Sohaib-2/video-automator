@@ -120,17 +120,17 @@ class FFmpegCommandBuilder:
         grain_input_index = None
         
         if video_motion_result:
-            # Check if result contains BOTH video overlay AND other filters
+            # Check if result contains video overlay AND other filters
             if isinstance(video_motion_result, str) and "|FILTERS|" in video_motion_result:
-                # Format: "VIDEO_OVERLAY:path:opacity:duration|FILTERS|filter1,filter2"
-                parts = video_motion_result.split("|FILTERS|")
+                # Format: "VIDEO_OVERLAY|path|opacity|duration|FILTERS|filter1,filter2"
+                parts = video_motion_result.split("|FILTERS|", 1)  # Split only on first occurrence
                 overlay_part = parts[0]
                 filters_part = parts[1]
                 
                 # Parse overlay
-                if overlay_part.startswith("VIDEO_OVERLAY:"):
+                if overlay_part.startswith("VIDEO_OVERLAY|"):
                     has_video_overlay = True
-                    overlay_parts = overlay_part.split(":")
+                    overlay_parts = overlay_part.split("|")
                     
                     if len(overlay_parts) >= 4:
                         video_overlay_info = {
@@ -140,13 +140,13 @@ class FFmpegCommandBuilder:
                         }
                         
                         # Add grain video input with looping
-                        grain_input_index = num_images + 1  # After all images and audio
+                        grain_input_index = num_images + 1
                         grain_path = video_overlay_info['path']
                         
                         cmd.extend([
-                            '-stream_loop', '-1',  # Loop the grain video indefinitely
-                            '-i', grain_path,      # Input grain video
-                            '-t', str(duration)    # Limit to match main video duration
+                            '-stream_loop', '-1',
+                            '-i', grain_path,
+                            '-t', str(duration)
                         ])
                         
                         logger.info(f"✨ Added GRAIN OVERLAY: {grain_path} at index {grain_input_index}")
@@ -156,15 +156,12 @@ class FFmpegCommandBuilder:
                     video_motion_filters = filters_part
                     logger.info(f"🎬 Will apply filters THEN grain: {video_motion_filters[:80]}...")
                 
-            elif isinstance(video_motion_result, str) and video_motion_result.startswith("VIDEO_OVERLAY:"):
+            elif isinstance(video_motion_result, str) and video_motion_result.startswith("VIDEO_OVERLAY|"):
                 # Only video overlay, no other filters
                 has_video_overlay = True
-                parts = video_motion_result.split(":")
+                parts = video_motion_result.split("|")
                 
-                if len(parts) < 4:
-                    logger.error(f"Invalid VIDEO_OVERLAY format: {video_motion_result}")
-                    logger.warning("Skipping video overlay due to parse error")
-                else:
+                if len(parts) >= 4:
                     video_overlay_info = {
                         'path': parts[1],
                         'opacity': float(parts[2]),
@@ -172,17 +169,20 @@ class FFmpegCommandBuilder:
                     }
                     
                     # Add grain video input with looping
-                    grain_input_index = num_images + 1  # After all images and audio
+                    grain_input_index = num_images + 1
                     grain_path = video_overlay_info['path']
                     
                     cmd.extend([
-                        '-stream_loop', '-1',  # Loop the grain video indefinitely
-                        '-i', grain_path,      # Input grain video
-                        '-t', str(duration)    # Limit to match main video duration
+                        '-stream_loop', '-1',
+                        '-i', grain_path,
+                        '-t', str(duration)
                     ])
                     
                     logger.info(f"✨ Added REAL GRAIN OVERLAY: {grain_path} at index {grain_input_index}")
                     logger.info(f"   Opacity: {video_overlay_info['opacity']:.2f} | Duration: {duration:.2f}s")
+                else:
+                    logger.error(f"Invalid VIDEO_OVERLAY format: {video_motion_result}")
+                    logger.warning("Skipping video overlay due to parse error")
                 
             else:
                 # Normal filter string only (Tilt, etc - no grain)
