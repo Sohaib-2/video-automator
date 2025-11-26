@@ -7,12 +7,14 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Dict, List
+from utils.resource_path import get_ffmpeg_path, get_ffprobe_path
 
 
 def check_ffmpeg_installed() -> bool:
     """Check if FFmpeg is installed and available"""
     try:
-        subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+        ffmpeg_cmd = get_ffmpeg_path()
+        subprocess.run([ffmpeg_cmd, '-version'], capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
@@ -29,8 +31,9 @@ def check_gpu_available() -> bool:
 
 def get_audio_duration(audio_path: str) -> float:
     """Get duration of audio file in seconds"""
+    ffprobe_cmd = get_ffprobe_path()
     cmd = [
-        'ffprobe',
+        ffprobe_cmd,
         '-v', 'error',
         '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1',

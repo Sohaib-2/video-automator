@@ -10,6 +10,7 @@ from typing import List, Dict
 from .motion_effects import MotionEffectBuilder
 from .subtitle_style import SubtitleStyleBuilder
 from .utils import check_gpu_available
+from utils.resource_path import get_ffmpeg_path
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,8 @@ class FFmpegCommandBuilder:
         logger.info(f"Effect intensities: {intensities}")
         
         # Start command
-        cmd = ['ffmpeg', '-y']
+        ffmpeg_cmd = get_ffmpeg_path()
+        cmd = [ffmpeg_cmd, '-y']
         
         # Hardware acceleration
         crop_settings = self.settings.get('crop_settings', None)

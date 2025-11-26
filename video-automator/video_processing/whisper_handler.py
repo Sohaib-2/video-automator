@@ -7,6 +7,8 @@ import logging
 import whisper
 import torch
 from typing import List, Dict
+from utils.resource_path import get_resource_path
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +28,21 @@ class WhisperHandler:
             logger.info("No CUDA detected - will use CPU for Whisper")
     
     def load_model(self, model_size: str = "base"):
-        """
-        Load Whisper model with GPU/CPU fallback
+        # Check for bundled model first
+        bundled_model = get_resource_path(f"models/{model_size}.pt")
         
-        Args:
-            model_size: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
-        """
         if self.cuda_available and not self.failed_gpu:
             try:
                 logger.info(f"Loading Whisper model '{model_size}' on GPU (CUDA)...")
-                self.model = whisper.load_model(model_size, device="cuda")
+                
+                # Use bundled model if exists
+                if os.path.exists(bundled_model):
+                    logger.info(f"Using bundled model: {bundled_model}")
+                    self.model = whisper.load_model(bundled_model, device="cuda")
+                else:
+                    logger.info("Downloading model (first time only)...")
+                    self.model = whisper.load_model(model_size, device="cuda")
+                
                 self.device = "cuda"
                 logger.info("✓ Whisper model loaded successfully on GPU")
                 return
@@ -46,13 +53,20 @@ class WhisperHandler:
         
         try:
             logger.info(f"Loading Whisper model '{model_size}' on CPU...")
-            self.model = whisper.load_model(model_size, device="cpu")
+            
+            # Use bundled model if exists
+            if os.path.exists(bundled_model):
+                logger.info(f"Using bundled model: {bundled_model}")
+                self.model = whisper.load_model(bundled_model, device="cpu")
+            else:
+                logger.info("Downloading model (first time only)...")
+                self.model = whisper.load_model(model_size, device="cpu")
+            
             self.device = "cpu"
             logger.info("✓ Whisper model loaded successfully on CPU")
         except Exception as e:
             logger.error(f"✗ Failed to load Whisper model: {str(e)}")
             raise
-    
     def transcribe(self, audio_path: str) -> List[Dict]:
         """
         Transcribe audio file to generate caption segments

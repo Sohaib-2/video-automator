@@ -7,6 +7,7 @@ UPDATED: Only 3 effects - Static, Noise (BIG CHUNKY RANDOM GRAIN), Tilt
 import logging
 from typing import Dict, Optional, List
 from PIL import Image
+from utils.resource_path import get_resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class MotionEffectBuilder:
             logger.info(f"Adding REAL FILM GRAIN overlay - Intensity: {intensity}%, Opacity: {opacity:.2f}")
             
             # Path to grain overlay video (3 second loop)
-            grain_video_path = "video-automator/resources/noise2.mp4"
+            grain_video_path = get_resource_path("resources/noise2.mp4")
             
             # Check if grain overlay exists
             import os
