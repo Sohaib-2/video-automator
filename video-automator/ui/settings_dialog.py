@@ -1,7 +1,7 @@
 """
 Enhanced Settings Dialog
 Live preview of caption settings with effect intensity sliders
-UPDATED: Only 3 effects (Static, Noise, Tilt) with intensity control
+UPDATED: 4 effects (Static, Noise, Tilt, Dynamic Tilt) with intensity control
 """
 
 from PyQt5.QtWidgets import (
@@ -43,7 +43,7 @@ class EnhancedSettingsDialog(QDialog):
             'shadow_depth': 2,
             'position': 'Bottom Center',
             'motion_effects': ['Static'],
-            'motion_effect_intensities': {'Noise': 50, 'Tilt': 50},
+            'motion_effect_intensities': {'Noise': 50, 'Tilt': 50, 'Dynamic Tilt': 50},
             'crop_settings': None,
             'caption_position': {'x': 0.5, 'y': 0.9},
             'preview_text': 'Sample Caption Text',
@@ -61,7 +61,7 @@ class EnhancedSettingsDialog(QDialog):
             
             # Ensure motion_effect_intensities exists
             if 'motion_effect_intensities' not in self.settings:
-                self.settings['motion_effect_intensities'] = {'Noise': 50, 'Tilt': 50}
+                self.settings['motion_effect_intensities'] = {'Noise': 50, 'Tilt': 50, 'Dynamic Tilt': 50}
             
             print(f"[DEBUG] Loaded settings with crop: {self.settings.get('crop_settings')}")
             print(f"[DEBUG] Loaded caption position: {self.settings.get('caption_position')}")
@@ -138,7 +138,7 @@ class EnhancedSettingsDialog(QDialog):
     def _create_zoom_controls(self):
         """Create zoom control group"""
         zoom_group = QGroupBox("🔍 Zoom & Position Controls")
-        zoom_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        zoom_group.setStyleSheet(Styles.SETTINGS_GROUPBOX)
         zoom_layout = QVBoxLayout()
         
         # Zoom buttons
@@ -201,7 +201,7 @@ class EnhancedSettingsDialog(QDialog):
     def _create_motion_effects(self):
         """Create motion effects section with checkboxes and intensity sliders"""
         effects_group = QGroupBox("🎬 Motion Effects")
-        effects_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        effects_group.setStyleSheet(Styles.SETTINGS_GROUPBOX)
         effects_layout = QVBoxLayout()
         
         # Get currently selected effects and intensities
@@ -209,7 +209,7 @@ class EnhancedSettingsDialog(QDialog):
         if isinstance(selected_effects, str):
             selected_effects = [selected_effects]
         
-        intensities = self.settings.get('motion_effect_intensities', {'Noise': 50, 'Tilt': 50})
+        intensities = self.settings.get('motion_effect_intensities', {'Noise': 50, 'Tilt': 50, 'Dynamic Tilt': 50})
         
         # Create checkboxes and sliders for each effect
         self.effect_checkboxes = {}
@@ -219,6 +219,7 @@ class EnhancedSettingsDialog(QDialog):
         # Static effect (no intensity slider)
         static_checkbox = QCheckBox("Static")
         static_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        static_checkbox.setStyleSheet(Styles.EFFECT_CHECKBOX)
         static_checkbox.setChecked('Static' in selected_effects)
         static_checkbox.stateChanged.connect(self.on_effect_changed)
         effects_layout.addWidget(static_checkbox)
@@ -234,20 +235,22 @@ class EnhancedSettingsDialog(QDialog):
         # Noise effect with intensity slider
         noise_checkbox = QCheckBox("Noise (Film Grain)")
         noise_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        noise_checkbox.setStyleSheet(Styles.EFFECT_CHECKBOX)
         noise_checkbox.setChecked('Noise' in selected_effects)
         noise_checkbox.stateChanged.connect(self.on_effect_changed)
         effects_layout.addWidget(noise_checkbox)
-        
+
         noise_desc = QLabel("   └ Add big chunky film grain effect")
         noise_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
         effects_layout.addWidget(noise_desc)
-        
+
         # Noise intensity slider
         noise_slider_layout = QHBoxLayout()
         noise_slider_layout.addSpacing(30)
         noise_slider_layout.addWidget(QLabel("Intensity:"))
-        
+
         noise_slider = QSlider(Qt.Horizontal)
+        noise_slider.setStyleSheet(Styles.EFFECT_SLIDER)
         noise_slider.setRange(0, 100)
         noise_slider.setValue(intensities.get('Noise', 50))
         noise_slider.setEnabled('Noise' in selected_effects)
@@ -270,20 +273,22 @@ class EnhancedSettingsDialog(QDialog):
         # Tilt effect with intensity slider
         tilt_checkbox = QCheckBox("Tilt (Rotation)")
         tilt_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        tilt_checkbox.setStyleSheet(Styles.EFFECT_CHECKBOX)
         tilt_checkbox.setChecked('Tilt' in selected_effects)
         tilt_checkbox.stateChanged.connect(self.on_effect_changed)
         effects_layout.addWidget(tilt_checkbox)
-        
+
         tilt_desc = QLabel("   └ Gentle left-right tilting/rotation")
         tilt_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
         effects_layout.addWidget(tilt_desc)
-        
+
         # Tilt intensity slider
         tilt_slider_layout = QHBoxLayout()
         tilt_slider_layout.addSpacing(30)
         tilt_slider_layout.addWidget(QLabel("Intensity:"))
-        
+
         tilt_slider = QSlider(Qt.Horizontal)
+        tilt_slider.setStyleSheet(Styles.EFFECT_SLIDER)
         tilt_slider.setRange(0, 100)
         tilt_slider.setValue(intensities.get('Tilt', 50))
         tilt_slider.setEnabled('Tilt' in selected_effects)
@@ -300,9 +305,47 @@ class EnhancedSettingsDialog(QDialog):
         self.effect_checkboxes['Tilt'] = tilt_checkbox
         self.effect_sliders['Tilt'] = tilt_slider
         self.effect_value_labels['Tilt'] = tilt_value_label
-        
+
         effects_layout.addSpacing(10)
-        
+
+        # Dynamic Tilt effect with intensity slider
+        dynamic_tilt_checkbox = QCheckBox("Dynamic Tilt")
+        dynamic_tilt_checkbox.setFont(QFont('Arial', 11, QFont.Bold))
+        dynamic_tilt_checkbox.setStyleSheet(Styles.EFFECT_CHECKBOX)
+        dynamic_tilt_checkbox.setChecked('Dynamic Tilt' in selected_effects)
+        dynamic_tilt_checkbox.stateChanged.connect(self.on_effect_changed)
+        effects_layout.addWidget(dynamic_tilt_checkbox)
+
+        dynamic_tilt_desc = QLabel("   └ Fixed 20° tilt + smooth zoom in/out")
+        dynamic_tilt_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        effects_layout.addWidget(dynamic_tilt_desc)
+
+        # Dynamic Tilt intensity slider
+        dynamic_tilt_slider_layout = QHBoxLayout()
+        dynamic_tilt_slider_layout.addSpacing(30)
+        dynamic_tilt_slider_layout.addWidget(QLabel("Intensity:"))
+
+        dynamic_tilt_slider = QSlider(Qt.Horizontal)
+        dynamic_tilt_slider.setStyleSheet(Styles.EFFECT_SLIDER)
+        dynamic_tilt_slider.setRange(0, 100)
+        dynamic_tilt_slider.setValue(intensities.get('Dynamic Tilt', 50))
+        dynamic_tilt_slider.setEnabled('Dynamic Tilt' in selected_effects)
+        dynamic_tilt_slider.valueChanged.connect(self.on_intensity_changed)
+        dynamic_tilt_slider_layout.addWidget(dynamic_tilt_slider)
+
+        dynamic_tilt_value_label = QLabel(f"{intensities.get('Dynamic Tilt', 50)}%")
+        dynamic_tilt_value_label.setMinimumWidth(45)
+        dynamic_tilt_value_label.setStyleSheet("font-weight: bold; color: #1976D2;")
+        dynamic_tilt_slider_layout.addWidget(dynamic_tilt_value_label)
+
+        effects_layout.addLayout(dynamic_tilt_slider_layout)
+
+        self.effect_checkboxes['Dynamic Tilt'] = dynamic_tilt_checkbox
+        self.effect_sliders['Dynamic Tilt'] = dynamic_tilt_slider
+        self.effect_value_labels['Dynamic Tilt'] = dynamic_tilt_value_label
+
+        effects_layout.addSpacing(10)
+
         # Info label
         info_label = QLabel(
             "💡 You can combine multiple effects!\n"
@@ -321,19 +364,19 @@ class EnhancedSettingsDialog(QDialog):
     def on_effect_changed(self):
         """Handle effect checkbox changes"""
         # Enable/disable sliders based on checkbox state
-        for effect in ['Noise', 'Tilt']:
+        for effect in ['Noise', 'Tilt', 'Dynamic Tilt']:
             if effect in self.effect_checkboxes and effect in self.effect_sliders:
                 is_checked = self.effect_checkboxes[effect].isChecked()
                 self.effect_sliders[effect].setEnabled(is_checked)
-        
+
         # Log selected effects
         selected = self.get_selected_effects()
         print(f"[DEBUG] Selected effects: {selected}")
-    
+
     def on_intensity_changed(self):
         """Handle intensity slider changes"""
         # Update value labels
-        for effect in ['Noise', 'Tilt']:
+        for effect in ['Noise', 'Tilt', 'Dynamic Tilt']:
             if effect in self.effect_sliders and effect in self.effect_value_labels:
                 value = self.effect_sliders[effect].value()
                 self.effect_value_labels[effect].setText(f"{value}%")
@@ -355,7 +398,7 @@ class EnhancedSettingsDialog(QDialog):
     def get_effect_intensities(self):
         """Get intensity values for each effect"""
         intensities = {}
-        for effect in ['Noise', 'Tilt']:
+        for effect in ['Noise', 'Tilt', 'Dynamic Tilt']:
             if effect in self.effect_sliders:
                 intensities[effect] = self.effect_sliders[effect].value()
         return intensities

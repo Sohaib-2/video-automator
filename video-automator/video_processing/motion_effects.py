@@ -1,7 +1,7 @@
 """
 Motion Effects Builder
 Generates FFmpeg filter strings for various motion effects with intensity control
-UPDATED: Only 3 effects - Static, Noise (BIG CHUNKY RANDOM GRAIN), Tilt
+UPDATED: 4 effects - Static, Noise (BIG CHUNKY RANDOM GRAIN), Tilt, Dynamic Tilt
 """
 
 import logging
@@ -18,12 +18,14 @@ class MotionEffectBuilder:
     SUPPORTED_EFFECTS = [
         "Static",
         "Noise",
-        "Tilt"
+        "Tilt",
+        "Dynamic Tilt"
     ]
-    
+
     DEFAULT_INTENSITIES = {
         "Noise": 50,
-        "Tilt": 50
+        "Tilt": 50,
+        "Dynamic Tilt": 50
     }
     
     @staticmethod
@@ -183,13 +185,13 @@ class MotionEffectBuilder:
         elif effect == "Tilt":
             # Tilt/rotation with adjustable intensity
             # Scale tilt angle based on intensity: 0-100 maps to 0-5 degrees
-            
+
             # Tilt angle: subtle at low intensity, more dramatic at high
             # Range: 0.3° (barely noticeable) to 5° (quite dramatic)
             tilt_angle = 0.3 + (intensity / 100.0) * 4.7
-            
+
             logger.info(f"Adding Tilt effect - Intensity: {intensity}%, Max Angle: {tilt_angle:.1f}°")
-            
+
             # Pre-scale to avoid black edges during rotation
             scale_factor = 1.15  # Scale up 15% to ensure no black edges
             return (
@@ -197,7 +199,36 @@ class MotionEffectBuilder:
                 f"rotate='{tilt_angle}*PI/180*sin(t*0.5)':c=none,"
                 f"crop=1920:1080:(iw-1920)/2:(ih-1080)/2"
             )
-        
+
+        elif effect == "Dynamic Tilt":
+            # DYNAMIC TILT: Fixed 20° tilt + smooth zoom in/out animation
+            # Creates movement without feeling static
+
+            # Zoom intensity: 0-100% maps to zoom range
+            # At 50%: zoom between 1.0x and 1.15x
+            # At 100%: zoom between 1.0x and 1.30x
+            max_zoom = 0.15 + (intensity / 100.0) * 0.15  # Range: 0.15 to 0.30
+
+            logger.info(f"Adding Dynamic Tilt effect - Intensity: {intensity}%, Fixed 20° tilt, Zoom: 1.0x-{1.0+max_zoom:.2f}x")
+
+            # Base scale factor to prevent black corners (1.3x for 20° rotation)
+            base_scale = 1.3
+
+            # Zoom formula: smooth sine wave completing one cycle over duration
+            # zoom(t) = 1.0 + max_zoom * (0.5 - 0.5*cos(2*PI*t/duration))
+            # This gives: t=0: 1.0x, t=duration/2: 1.0+max_zoom, t=duration: 1.0x
+
+            zoom_expr = f"1.0+{max_zoom}*(0.5-0.5*cos(2*PI*t/{total_duration}))"
+
+            return (
+                # Apply base scale + animated zoom
+                f"scale='1920*{base_scale}*({zoom_expr})':'1080*{base_scale}*({zoom_expr})':flags=lanczos,"
+                # Fixed 20° rotation (no oscillation)
+                f"rotate=20*PI/180:c=none,"
+                # Crop to final 1920x1080
+                f"crop=1920:1080:(iw-1920)/2:(ih-1080)/2"
+            )
+
         else:
             logger.warning(f"Unknown motion effect: {effect}, skipping")
             return None
