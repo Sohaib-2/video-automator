@@ -201,14 +201,14 @@ class MotionEffectBuilder:
             )
 
         elif effect == "Dynamic Tilt":
-            # DYNAMIC TILT: Oscillating tilt (-20° to +20°) + smooth zoom in/out animation
+            # DYNAMIC TILT: Oscillating tilt + smooth zoom in/out animation
             # Creates dynamic movement with rotation
 
             # Tilt angle based on intensity: 0-100% maps to max tilt angle
-            # At 0%: ±2° oscillation (very subtle)
-            # At 50%: ±12° oscillation (medium)
-            # At 100%: ±20° oscillation (dramatic)
-            max_tilt_angle = 2 + (intensity / 100.0) * 18  # Range: 2 to 20 degrees
+            # At 0%: ±1° oscillation (very subtle)
+            # At 50%: ±5.5° oscillation (medium - comfortable viewing)
+            # At 100%: ±10° oscillation (dramatic but not excessive)
+            max_tilt_angle = 1 + (intensity / 100.0) * 9  # Range: 1 to 10 degrees
 
             # Zoom range based on intensity
             # At 50%: zoom between 1.0x and 1.15x

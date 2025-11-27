@@ -37,10 +37,10 @@ class CaptionGenerator:
     def format_timestamp(seconds: float) -> str:
         """
         Convert seconds to SRT timestamp format (HH:MM:SS,mmm)
-        
+
         Args:
             seconds: Time in seconds
-            
+
         Returns:
             Formatted timestamp string
         """
@@ -49,6 +49,52 @@ class CaptionGenerator:
         secs = int(seconds % 60)
         millis = int((seconds % 1) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+    @staticmethod
+    def wrap_caption_text(text: str, max_line_chars: int = 40) -> str:
+        """
+        Wrap long caption text by inserting line breaks at appropriate positions.
+        This ensures captions display on 2 lines when they're too long for 1 line.
+
+        Args:
+            text: Caption text to wrap
+            max_line_chars: Maximum characters per line before wrapping (default: 40)
+
+        Returns:
+            Text with line breaks inserted where appropriate
+        """
+        # If text is short enough, no wrapping needed
+        if len(text) <= max_line_chars:
+            return text
+
+        # Find the best place to break (near middle, at a space)
+        words = text.split()
+        if len(words) <= 1:
+            # Single long word - can't wrap nicely
+            return text
+
+        # Build lines by adding words until we exceed half the max length
+        target_break = len(text) // 2
+        current_line = []
+        current_length = 0
+
+        for i, word in enumerate(words):
+            word_length = len(word)
+
+            # Would adding this word exceed our target?
+            if current_length + word_length > target_break and current_line:
+                # Found a good breaking point
+                line1 = ' '.join(current_line)
+                line2 = ' '.join(words[i:])
+                result = f"{line1}\n{line2}"
+                logger.debug(f"Wrapped: '{text}' → '{result}'")
+                return result
+
+            current_line.append(word)
+            current_length += word_length + 1  # +1 for space
+
+        # If we got here, just return original (shouldn't happen)
+        return text
     
     @staticmethod
     def split_into_shorter_segments(captions: List[Dict], max_words: int = 12, max_chars: int = 50) -> List[Dict]:
@@ -167,7 +213,7 @@ class CaptionGenerator:
         else:
             logger.warning("⚠ Caption splitting disabled - long captions may overflow!")
 
-        # Write SRT file with text case transformation
+        # Write SRT file with text case transformation and wrapping
         with open(output_path, 'w', encoding='utf-8') as f:
             for i, caption in enumerate(captions, 1):
                 start_time = CaptionGenerator.format_timestamp(caption['start'])
@@ -175,6 +221,9 @@ class CaptionGenerator:
 
                 # Apply text case transformation
                 caption_text = CaptionGenerator.apply_text_case(caption['text'], text_case)
+
+                # Apply wrapping to ensure long captions split to 2 lines
+                caption_text = CaptionGenerator.wrap_caption_text(caption_text, max_line_chars=40)
 
                 f.write(f"{i}\n")
                 f.write(f"{start_time} --> {end_time}\n")
