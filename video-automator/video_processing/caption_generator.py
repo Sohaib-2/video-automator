@@ -178,18 +178,27 @@ class CaptionGenerator:
                 result.append(caption)
                 continue
             
-            # Distribute timing evenly across chunks
-            num_chunks = len(chunks)
-            time_per_chunk = duration / num_chunks
-            
-            for i, chunk in enumerate(chunks):
+            # Distribute timing PROPORTIONALLY based on word count
+            # Calculate total words across all chunks
+            total_words = sum(len(chunk.split()) for chunk in chunks)
+
+            # Assign time proportionally to each chunk
+            current_time = caption['start']
+            for chunk in chunks:
+                chunk_words = len(chunk.split())
+                chunk_proportion = chunk_words / total_words
+                chunk_duration = duration * chunk_proportion
+
                 result.append({
-                    'start': caption['start'] + (i * time_per_chunk),
-                    'end': caption['start'] + ((i + 1) * time_per_chunk),
+                    'start': current_time,
+                    'end': current_time + chunk_duration,
                     'text': chunk
                 })
-            
-            logger.info(f"✂ Split: '{text[:40]}...' → {num_chunks} segments")
+
+                logger.debug(f"  → Timing: {chunk_words} words = {chunk_proportion:.1%} of time ({chunk_duration:.2f}s)")
+                current_time += chunk_duration
+
+            logger.info(f"✂ Split: '{text[:40]}...' → {len(chunks)} segments (proportional timing)")
         
         logger.info(f"📊 Caption splitting: {len(captions)} original → {len(result)} final segments")
         return result
