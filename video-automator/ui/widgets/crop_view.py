@@ -236,9 +236,13 @@ class ImageCropView(QGraphicsView):
             has_outline = not has_background
 
         # Calculate max width based on safe zones (80% of screen width = 1536px for 1920px)
+        # This matches the video rendering which uses max 30 chars and 10% margins
         crop_rect = self.crop_frame.rect()
         margin_px = crop_rect.width() * self.SAFE_MARGIN_PERCENT
         max_caption_width = crop_rect.width() - (2 * margin_px)  # 1536px
+
+        # Also enforce word wrapping in HTML to match video behavior
+        # Max ~30 characters per line to match video caption splitting
 
         # Use parsed font properties for HTML rendering
         font_weight = 'bold' if is_bold else 'normal'
@@ -247,7 +251,8 @@ class ImageCropView(QGraphicsView):
             # Create HTML with background and max-width constraint
             html = f"""
             <div style='background-color: rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, {bg_opacity/100.0});
-                        padding: 10px; border-radius: 5px; max-width: {int(max_caption_width)}px;'>
+                        padding: 10px; border-radius: 5px; max-width: {int(max_caption_width)}px;
+                        word-wrap: break-word; overflow-wrap: break-word;'>
                 <span style='color: {color.name()}; font-family: {font_name}; font-size: {font_size}pt; font-weight: {font_weight};'>
                     {text}
                 </span>
@@ -256,7 +261,7 @@ class ImageCropView(QGraphicsView):
         elif has_outline and outline_color:
             # No background but with outline and max-width
             html = f"""
-            <div style='max-width: {int(max_caption_width)}px;'>
+            <div style='max-width: {int(max_caption_width)}px; word-wrap: break-word; overflow-wrap: break-word;'>
                 <span style='color: {color.name()}; font-family: {font_name}; font-size: {font_size}pt; font-weight: {font_weight};
                              text-shadow:
                                  -{outline_width}px -{outline_width}px 0 {outline_color.name()},
@@ -271,7 +276,7 @@ class ImageCropView(QGraphicsView):
         else:
             # No background, no outline - just text with basic shadow and max-width
             html = f"""
-            <div style='max-width: {int(max_caption_width)}px;'>
+            <div style='max-width: {int(max_caption_width)}px; word-wrap: break-word; overflow-wrap: break-word;'>
                 <span style='color: {color.name()}; font-family: {font_name}; font-size: {font_size}pt; font-weight: {font_weight};
                              text-shadow: 2px 2px 4px rgba(0,0,0,0.8);'>
                     {text}

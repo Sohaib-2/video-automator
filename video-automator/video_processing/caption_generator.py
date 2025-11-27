@@ -32,21 +32,21 @@ class CaptionGenerator:
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
     
     @staticmethod
-    def split_into_shorter_segments(captions: List[Dict], max_words: int = 6, max_chars: int = 50) -> List[Dict]:
+    def split_into_shorter_segments(captions: List[Dict], max_words: int = 6, max_chars: int = 30) -> List[Dict]:
         """
         HYBRID APPROACH: Split long captions with word AND character limits
-        
+
         This prevents both:
         - Long sentences from overflowing (word limit)
         - Individual long words from going off-screen (char limit)
-        
+
         FFmpeg will still auto-wrap within these segments as a safety net.
-        
+
         Args:
             captions: List of caption dictionaries with 'start', 'end', 'text'
             max_words: Maximum words per caption segment (default: 6 = ~2 lines max)
-            max_chars: Maximum characters per caption (safety for long words)
-            
+            max_chars: Maximum characters per caption (default: 30 for safe zone compliance)
+
         Returns:
             List of optimally-split caption segments
         """
@@ -129,16 +129,16 @@ class CaptionGenerator:
         return result
     
     @staticmethod
-    def create_srt_file(captions: List[Dict], output_path: str, split_long: bool = True, max_words: int = 6, max_chars: int = 50):
+    def create_srt_file(captions: List[Dict], output_path: str, split_long: bool = True, max_words: int = 6, max_chars: int = 30):
         """
         Create SRT subtitle file from captions with intelligent splitting
-        
+
         Args:
             captions: List of caption dictionaries with 'start', 'end', 'text'
             output_path: Path where SRT file will be saved
             split_long: Whether to split long captions (RECOMMENDED: True)
             max_words: Maximum words per caption (default: 6)
-            max_chars: Maximum characters per caption (default: 50)
+            max_chars: Maximum characters per caption (default: 30 for safe zone compliance)
         """
         # Apply smart splitting if enabled
         if split_long:

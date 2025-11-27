@@ -110,9 +110,10 @@ class VideoProcessor:
             
             captions = self.whisper_handler.transcribe(files['voiceover'])
             
-            # Create SRT file
+            # Create SRT file with tighter character limits for safe zone compliance
+            # Max 30 chars ensures text fits within 1536px safe zone even at large font sizes
             temp_srt = os.path.join(folder_path, 'temp_captions.srt')
-            CaptionGenerator.create_srt_file(captions, temp_srt)
+            CaptionGenerator.create_srt_file(captions, temp_srt, max_words=6, max_chars=30)
             
             # Build and run FFmpeg command
             if progress_callback:
