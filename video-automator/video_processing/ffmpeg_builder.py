@@ -304,7 +304,20 @@ class FFmpegCommandBuilder:
         logger.info(f"Using smart bitrate: {target_bitrate} (max: {max_bitrate})")
         
         quality_cq = self.config.quality
-        
+
+        # Determine appropriate H.264 level based on resolution
+        width, height = self.config.resolution
+        if height >= 2160:  # 4K
+            h264_level = '5.1'
+        elif height >= 1440:  # 2K
+            h264_level = '5.0'
+        elif height >= 1080:  # 1080p
+            h264_level = '4.2'
+        else:  # 720p or lower
+            h264_level = '4.0'
+
+        logger.info(f"Resolution: {width}x{height}, using H.264 level {h264_level}")
+
         # Video encoding
         if use_gpu and check_gpu_available():
             cmd.extend([
@@ -317,7 +330,7 @@ class FFmpegCommandBuilder:
                 '-maxrate', max_bitrate,
                 '-bufsize', '4M',
                 '-profile:v', 'high',
-                '-level', '4.2',
+                '-level', h264_level,
                 '-spatial-aq', '1',
                 '-temporal-aq', '1',
                 '-rc-lookahead', '20'
@@ -330,7 +343,7 @@ class FFmpegCommandBuilder:
                 '-tune', 'film',
                 '-crf', str(quality_cq),
                 '-profile:v', 'high',
-                '-level', '4.2'
+                '-level', h264_level
             ])
             logger.info(f"Using CPU encoding with {fps} fps, CRF={quality_cq}")
         
