@@ -124,6 +124,8 @@ class MainWindow(QMainWindow):
                         settings['caption_position'] = {'x': 0.5, 'y': 0.9}
                     if 'caption_width_percent' not in settings:
                         settings['caption_width_percent'] = 0.80
+                    if 'video_resolution' not in settings:
+                        settings['video_resolution'] = '1080p'
                     
                     # UPDATED: Handle motion effects migration
                     if 'motion_effects' not in settings:
@@ -158,7 +160,8 @@ class MainWindow(QMainWindow):
             'motion_effects': ['Static'],  # Changed to list
             'crop_settings': None,
             'caption_position': {'x': 0.5, 'y': 0.9},
-            'caption_width_percent': 0.80
+            'caption_width_percent': 0.80,
+            'video_resolution': '1080p'
         }
 
     def save_settings(self):

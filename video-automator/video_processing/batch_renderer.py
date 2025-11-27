@@ -29,18 +29,24 @@ class VideoProcessor:
     def __init__(self, settings: Dict, config: Optional[VideoConfig] = None):
         """
         Initialize video processor
-        
+
         Args:
             settings: Video style settings dictionary
             config: Optional VideoConfig instance
         """
         self.settings = settings
-        self.config = config or VideoConfig()
+
+        # Create config from settings if not provided
+        if config is None:
+            resolution = settings.get('video_resolution', '1080p')
+            config = VideoConfig(resolution=resolution)
+
+        self.config = config
         self.whisper_handler = WhisperHandler()
-        
+
         config_info = self.config.get_info()
-        logger.info(f"Video Config: {config_info['fps_name']}, Quality: {config_info['quality_name']}")
-        
+        logger.info(f"Video Config: {config_info['fps_name']}, Quality: {config_info['quality_name']}, Resolution: {config_info['resolution_name']}")
+
         motion_effect = settings.get('motion_effect', 'Zoom In')
         logger.info(f"Motion Effect: {motion_effect}")
     
