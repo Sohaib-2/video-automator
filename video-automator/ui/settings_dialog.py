@@ -183,7 +183,8 @@ class EnhancedSettingsDialog(QDialog):
             "• Drag the <b>image</b> to reposition it<br>"
             "• Use <b>+/- buttons</b> or <b>mouse wheel</b> to zoom<br>"
             "• Drag the <b>caption</b> to change its position<br>"
-            "• Red frame shows final 16:9 video output"
+            "• <span style='color: red;'>Red frame</span> shows final 16:9 video output<br>"
+            "• <span style='color: green;'>Green dashed lines</span> show caption safe zones (10% margins)"
         )
         instructions.setStyleSheet(
             "color: #666; font-size: 11px; padding: 8px; "

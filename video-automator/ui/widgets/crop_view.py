@@ -34,6 +34,13 @@ class ImageCropView(QGraphicsView):
         self.crop_frame.setBrush(QBrush(Qt.transparent))
         self.crop_frame.setZValue(100)  # Always on top
         self.scene.addItem(self.crop_frame)
+
+        # Safe zone boundaries (10% margins on each side)
+        # For 1920px width: 192px left + 192px right = 1536px safe area
+        self.SAFE_MARGIN_PERCENT = 0.10
+        self.safe_zone_left = None
+        self.safe_zone_right = None
+        self._add_safe_zone_guides()
         
         # Zoom level
         self.zoom_level = 1.0
@@ -42,7 +49,34 @@ class ImageCropView(QGraphicsView):
         
         # Caption overlay
         self.caption_item = None
-        
+
+    def _add_safe_zone_guides(self):
+        """Add visual guides showing the safe zone boundaries (10% margins)"""
+        crop_rect = self.crop_frame.rect()
+        margin_px = crop_rect.width() * self.SAFE_MARGIN_PERCENT  # 192px for 1920px width
+
+        # Left boundary line
+        self.safe_zone_left = QGraphicsRectItem(
+            crop_rect.x() + margin_px,
+            crop_rect.y(),
+            0,  # No width - just a line
+            crop_rect.height()
+        )
+        self.safe_zone_left.setPen(QPen(QColor(0, 255, 0, 150), 2, Qt.DashLine))
+        self.safe_zone_left.setZValue(101)  # Above crop frame
+        self.scene.addItem(self.safe_zone_left)
+
+        # Right boundary line
+        self.safe_zone_right = QGraphicsRectItem(
+            crop_rect.x() + crop_rect.width() - margin_px,
+            crop_rect.y(),
+            0,  # No width - just a line
+            crop_rect.height()
+        )
+        self.safe_zone_right.setPen(QPen(QColor(0, 255, 0, 150), 2, Qt.DashLine))
+        self.safe_zone_right.setZValue(101)  # Above crop frame
+        self.scene.addItem(self.safe_zone_right)
+
     def resizeEvent(self, event):
         """Maintain 16:9 aspect ratio on resize"""
         super().resizeEvent(event)
@@ -173,48 +207,76 @@ class ImageCropView(QGraphicsView):
         outline_color: QColor = None,
         outline_width: int = 3
     ):
-        """Add draggable caption to preview with outline support"""
+        """Add draggable caption to preview with outline support and safe zone constraints"""
         if self.caption_item:
             self.scene.removeItem(self.caption_item)
-        
+
         self.caption_item = DraggableCaptionItem(text)
-        self.caption_item.setFont(font)
+
+        # Parse font correctly (handle "Arial Bold" format like the video renderer does)
+        font_name = font.family()
+        font_size = font.pointSize()
+        is_bold = False
+
+        # Check if font name contains "Bold" and extract base font name
+        if ' Bold' in font_name:
+            font_name = font_name.replace(' Bold', '')
+            is_bold = True
+
+        # Create properly parsed font
+        parsed_font = QFont(font_name, font_size)
+        if is_bold:
+            parsed_font.setBold(True)
+
+        self.caption_item.setFont(parsed_font)
         self.caption_item.setDefaultTextColor(color)
-        
+
         # Handle outline - default to opposite of background if not specified
         if has_outline is None:
             has_outline = not has_background
-        
+
+        # Calculate max width based on safe zones (80% of screen width = 1536px for 1920px)
+        crop_rect = self.crop_frame.rect()
+        margin_px = crop_rect.width() * self.SAFE_MARGIN_PERCENT
+        max_caption_width = crop_rect.width() - (2 * margin_px)  # 1536px
+
+        # Use parsed font properties for HTML rendering
+        font_weight = 'bold' if is_bold else 'normal'
+
         if has_background:
-            # Create HTML with background
+            # Create HTML with background and max-width constraint
             html = f"""
             <div style='background-color: rgba({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}, {bg_opacity/100.0});
-                        padding: 10px; border-radius: 5px;'>
-                <span style='color: {color.name()}; font-family: {font.family()}; font-size: {font.pointSize()}pt; font-weight: bold;'>
+                        padding: 10px; border-radius: 5px; max-width: {int(max_caption_width)}px;'>
+                <span style='color: {color.name()}; font-family: {font_name}; font-size: {font_size}pt; font-weight: {font_weight};'>
                     {text}
                 </span>
             </div>
             """
         elif has_outline and outline_color:
-            # No background but with outline
+            # No background but with outline and max-width
             html = f"""
-            <span style='color: {color.name()}; font-family: {font.family()}; font-size: {font.pointSize()}pt; font-weight: bold;
-                         text-shadow: 
-                             -{outline_width}px -{outline_width}px 0 {outline_color.name()},
-                             {outline_width}px -{outline_width}px 0 {outline_color.name()},
-                             -{outline_width}px {outline_width}px 0 {outline_color.name()},
-                             {outline_width}px {outline_width}px 0 {outline_color.name()},
-                             2px 2px 4px rgba(0,0,0,0.5);'>
-                {text}
-            </span>
+            <div style='max-width: {int(max_caption_width)}px;'>
+                <span style='color: {color.name()}; font-family: {font_name}; font-size: {font_size}pt; font-weight: {font_weight};
+                             text-shadow:
+                                 -{outline_width}px -{outline_width}px 0 {outline_color.name()},
+                                 {outline_width}px -{outline_width}px 0 {outline_color.name()},
+                                 -{outline_width}px {outline_width}px 0 {outline_color.name()},
+                                 {outline_width}px {outline_width}px 0 {outline_color.name()},
+                                 2px 2px 4px rgba(0,0,0,0.5);'>
+                    {text}
+                </span>
+            </div>
             """
         else:
-            # No background, no outline - just text with basic shadow
+            # No background, no outline - just text with basic shadow and max-width
             html = f"""
-            <span style='color: {color.name()}; font-family: {font.family()}; font-size: {font.pointSize()}pt; font-weight: bold;
-                         text-shadow: 2px 2px 4px rgba(0,0,0,0.8);'>
-                {text}
-            </span>
+            <div style='max-width: {int(max_caption_width)}px;'>
+                <span style='color: {color.name()}; font-family: {font_name}; font-size: {font_size}pt; font-weight: {font_weight};
+                             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);'>
+                    {text}
+                </span>
+            </div>
             """
         
         self.caption_item.setHtml(html)
