@@ -55,7 +55,7 @@ class FFmpegCommandBuilder:
         fps = self.config.fps
         
         # Build subtitle style
-        style_builder = SubtitleStyleBuilder(self.settings)
+        style_builder = SubtitleStyleBuilder(self.settings, self.config.resolution)
         subtitle_style = style_builder.build()
         
         # Get motion effects (can be list or single string for backward compatibility)
@@ -110,7 +110,8 @@ class FFmpegCommandBuilder:
             motion_effects,
             duration,
             fps,
-            intensities
+            intensities,
+            self.config.resolution
         )
         
         # Check for video overlay instructions (grain overlay)
@@ -198,7 +199,8 @@ class FFmpegCommandBuilder:
                 time_per_image,
                 fps,
                 crop_settings,
-                img_path
+                img_path,
+                self.config.resolution
             )
             filter_parts.append(f"[{i}:v]{image_filter}[v{i}]")
         
@@ -218,10 +220,11 @@ class FFmpegCommandBuilder:
             filter_parts.append(f"[vconcat]{video_motion_filters}[vfiltered]")
             
             # Step 2: Prepare grain overlay stream
+            width, height = self.config.resolution
             grain_filter = (
                 f"[{grain_input_index}:v]"
-                f"scale=1920:1080:force_original_aspect_ratio=increase,"
-                f"crop=1920:1080,"
+                f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},"
                 f"format=rgba,"
                 f"colorchannelmixer=aa={opacity}"
                 f"[grain]"
@@ -238,12 +241,13 @@ class FFmpegCommandBuilder:
         elif has_video_overlay:
             # GRAIN OVERLAY ONLY (no other filters)
             opacity = video_overlay_info['opacity']
-            
+
             # Prepare grain overlay stream
+            width, height = self.config.resolution
             grain_filter = (
                 f"[{grain_input_index}:v]"
-                f"scale=1920:1080:force_original_aspect_ratio=increase,"
-                f"crop=1920:1080,"
+                f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},"
                 f"format=rgba,"
                 f"colorchannelmixer=aa={opacity}"
                 f"[grain]"

@@ -14,20 +14,22 @@ logger = logging.getLogger(__name__)
 
 class SubtitleStyleBuilder:
     """Builds FFmpeg ASS subtitle style with intelligent wrapping boundaries"""
-    
-    def __init__(self, settings: Dict):
+
+    def __init__(self, settings: Dict, resolution: tuple = (1920, 1080)):
         """
         Initialize subtitle style builder
-        
+
         Args:
             settings: Dictionary containing style settings
+            resolution: Output resolution as tuple (width, height)
         """
         self.settings = settings
-    
+        self.resolution = resolution
+
     def build(self) -> str:
         """
         Build complete subtitle style string for FFmpeg with wrapping safety net
-        
+
         Returns:
             ASS style format string with optimal wrapping configuration
         """
@@ -88,10 +90,10 @@ class SubtitleStyleBuilder:
         # ============================================================================
         # INDUSTRY-STANDARD SAFE MARGINS - 10% EACH SIDE
         # ============================================================================
-        # For 1920x1080 video:
-        # - Left margin:  192px (10%)
-        # - Right margin: 192px (10%)
-        # - Caption area: 1536px (80% of screen width)
+        # For any resolution:
+        # - Left margin:  10% of width
+        # - Right margin: 10% of width
+        # - Caption area: 80% of screen width
         #
         # This ensures:
         # ✅ Text never touches edges
@@ -99,18 +101,18 @@ class SubtitleStyleBuilder:
         # ✅ Professional look (YouTube, Netflix standard)
         # ✅ Natural wrapping at 2-3 lines for long captions
         # ============================================================================
-        
-        SCREEN_WIDTH = 1920
+
+        SCREEN_WIDTH, SCREEN_HEIGHT = self.resolution
         MINIMUM_SIDE_MARGIN_PERCENT = 0.10  # 10% minimum on each side
-        
+
         # Calculate absolute minimum margin in pixels
-        min_side_margin_px = int(SCREEN_WIDTH * MINIMUM_SIDE_MARGIN_PERCENT)  # 192px
-        
+        min_side_margin_px = int(SCREEN_WIDTH * MINIMUM_SIDE_MARGIN_PERCENT)
+
         # Apply minimum margins
-        margin_l = min_side_margin_px  # Always 192px (10%)
-        margin_r = min_side_margin_px  # Always 192px (10%)
-        
-        # Maximum caption width: 1920 - 192 - 192 = 1536px (80%)
+        margin_l = min_side_margin_px
+        margin_r = min_side_margin_px
+
+        # Maximum caption width
         max_caption_width = SCREEN_WIDTH - margin_l - margin_r
         
         logger.info(f"🎯 SAFE MARGINS:")
@@ -123,15 +125,15 @@ class SubtitleStyleBuilder:
         if y_norm < 0.33:
             # Top alignment
             v_align_base = 6
-            margin_v = int(y_norm * 1080)
+            margin_v = int(y_norm * SCREEN_HEIGHT)
         elif y_norm > 0.66:
             # Bottom alignment (default)
             v_align_base = 0
-            margin_v = int((1.0 - y_norm) * 1080)
+            margin_v = int((1.0 - y_norm) * SCREEN_HEIGHT)
         else:
             # Middle alignment
             v_align_base = 3
-            margin_v = int((0.5 - y_norm) * 1080)
+            margin_v = int((0.5 - y_norm) * SCREEN_HEIGHT)
         
         # Always use center alignment for best wrapping behavior
         h_align = 2  # Center horizontal alignment

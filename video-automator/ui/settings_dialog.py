@@ -7,7 +7,7 @@ UPDATED: 4 effects (Static, Noise, Tilt, Dynamic Tilt) with intensity control
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox,
     QPushButton, QGridLayout, QCheckBox, QGroupBox, QLineEdit, QMessageBox,
-    QColorDialog, QScrollArea, QWidget, QSlider
+    QColorDialog, QScrollArea, QWidget, QSlider, QRadioButton, QButtonGroup
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
@@ -47,7 +47,8 @@ class EnhancedSettingsDialog(QDialog):
             'crop_settings': None,
             'caption_position': {'x': 0.5, 'y': 0.9},
             'preview_text': 'Sample Caption Text',
-            'caption_width_percent': 0.80
+            'caption_width_percent': 0.80,
+            'video_resolution': '1080p'
         }
         
         # Merge current settings with defaults
@@ -566,7 +567,36 @@ class EnhancedSettingsDialog(QDialog):
         self.outline_width_spin.setEnabled(saved_has_outline)
         grid.addWidget(self.outline_width_spin, row, 1)
         row += 1
-        
+
+        # === Video Resolution ===
+        grid.addWidget(QLabel("Video Quality:"), row, 0)
+        resolution_layout = QVBoxLayout()
+        resolution_layout.setSpacing(5)
+
+        # Create radio button group
+        self.resolution_button_group = QButtonGroup()
+
+        resolutions = [
+            ('720p', '720p HD'),
+            ('1080p', '1080p Full HD'),
+            ('2K', '2K QHD'),
+            ('4K', '4K Ultra HD')
+        ]
+
+        saved_resolution = self.settings.get('video_resolution', '1080p')
+
+        for value, label in resolutions:
+            radio = QRadioButton(label)
+            radio.setStyleSheet("font-size: 11px;")
+            if value == saved_resolution:
+                radio.setChecked(True)
+            self.resolution_button_group.addButton(radio)
+            radio.value = value  # Store value on button
+            resolution_layout.addWidget(radio)
+
+        grid.addLayout(resolution_layout, row, 1)
+        row += 1
+
         return grid
     
     def _create_preview_text_input(self):
@@ -814,6 +844,13 @@ class EnhancedSettingsDialog(QDialog):
         text_case_map = {'Title Case': 'title', 'ALL CAPS': 'upper', 'Normal': 'normal'}
         text_case = text_case_map.get(text_case_display, 'title')
 
+        # Get selected resolution
+        selected_resolution = '1080p'  # default
+        for button in self.resolution_button_group.buttons():
+            if button.isChecked():
+                selected_resolution = button.value
+                break
+
         self.settings.update({
             'font': self.font_combo.currentText(),
             'font_size': self.font_size_spin.value(),
@@ -828,7 +865,8 @@ class EnhancedSettingsDialog(QDialog):
             'caption_position': caption_pos,
             'preview_text': self.sample_text_input.text(),
             'motion_effects': selected_effects,
-            'motion_effect_intensities': intensities
+            'motion_effect_intensities': intensities,
+            'video_resolution': selected_resolution
         })
         
         # Build effects summary
@@ -844,10 +882,18 @@ class EnhancedSettingsDialog(QDialog):
         effects_str = ", ".join(effects_parts)
         
         # Show success message
+        resolution_display = {
+            '720p': '720p HD',
+            '1080p': '1080p Full HD',
+            '2K': '2K QHD',
+            '4K': '4K Ultra HD'
+        }.get(selected_resolution, selected_resolution)
+
         QMessageBox.information(
             self,
             "✅ Settings Saved",
             f"Your settings have been saved successfully!\n\n"
+            f"📺 Video Quality: {resolution_display}\n"
             f"📝 Font: {self.settings['font']} ({self.settings['font_size']}px)\n"
             f"🎨 Caption Position: ({caption_pos['x']:.2f}, {caption_pos['y']:.2f})\n"
             f"🖼️ Crop: {crop_region['width']}x{crop_region['height']} "

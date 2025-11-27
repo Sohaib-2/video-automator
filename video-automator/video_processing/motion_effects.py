@@ -34,26 +34,28 @@ class MotionEffectBuilder:
         time_per_image: float,
         fps: int,
         crop_settings: Optional[Dict] = None,
-        image_path: Optional[str] = None
+        image_path: Optional[str] = None,
+        resolution: tuple = (1920, 1080)
     ) -> str:
         """
         Build FFmpeg filter for per-image processing (crop and scale only)
-        
+
         Args:
             effect: Motion effect name (not used here, kept for compatibility)
             time_per_image: Duration for each image in seconds
             fps: Frames per second
             crop_settings: Optional crop region {'x', 'y', 'width', 'height'}
             image_path: Path to image file (needed for crop validation)
-            
+            resolution: Output resolution as tuple (width, height)
+
         Returns:
             FFmpeg filter string for image preparation
         """
         # Build base filter with crop handling - no motion effects here
         base_filter = MotionEffectBuilder._build_base_filter(
-            crop_settings, image_path
+            crop_settings, image_path, resolution
         )
-        
+
         # Just apply base filter and fps - motion will be applied at video level
         return f"{base_filter},fps={fps}"
     
@@ -62,39 +64,41 @@ class MotionEffectBuilder:
         effects: List[str],
         total_duration: float,
         fps: int,
-        intensities: Optional[Dict[str, int]] = None
+        intensities: Optional[Dict[str, int]] = None,
+        resolution: tuple = (1920, 1080)
     ) -> Optional[str]:
         """
         Build FFmpeg filters for multiple video-level motion effects with intensity control
         Applied to entire concatenated video
-        
+
         Args:
             effects: List of motion effect names
             total_duration: Total video duration in seconds
             fps: Frames per second
             intensities: Dict mapping effect name to intensity (0-100)
-            
+            resolution: Output resolution as tuple (width, height)
+
         Returns:
             Combined FFmpeg filter string for video-level effects, or None for Static only
         """
         if intensities is None:
             intensities = {}
-        
+
         # Remove "Static" from effects list if present
         active_effects = [e for e in effects if e != "Static"]
-        
+
         if not active_effects:
             logger.info("No motion effects selected (Static)")
             return None
-        
+
         # Separate video overlay effects from filter effects
         video_overlay_result = None
         filter_chain = []
-        
+
         for effect in active_effects:
             intensity = intensities.get(effect, 50)  # Default 50% intensity
             effect_filter = MotionEffectBuilder._build_single_effect(
-                effect, total_duration, fps, intensity
+                effect, total_duration, fps, intensity, resolution
             )
             
             if effect_filter:
@@ -136,21 +140,25 @@ class MotionEffectBuilder:
         effect: str,
         total_duration: float,
         fps: int,
-        intensity: int = 50
+        intensity: int = 50,
+        resolution: tuple = (1920, 1080)
     ) -> Optional[str]:
         """
         Build single effect filter with intensity control
-        
+
         Args:
             effect: Motion effect name
             total_duration: Total video duration in seconds
             fps: Frames per second
             intensity: Effect intensity from 0-100 (50 = default)
-            
+            resolution: Output resolution as tuple (width, height)
+
         Returns:
             FFmpeg filter string for single effect
         """
-        
+
+        width, height = resolution
+
         if effect == "Noise":
             # REAL FILM GRAIN OVERLAY - Uses actual noise2.mp4 video file
             # This is how CapCut does it - overlay real grain footage!
@@ -195,9 +203,9 @@ class MotionEffectBuilder:
             # Pre-scale to avoid black edges during rotation
             scale_factor = 1.15  # Scale up 15% to ensure no black edges
             return (
-                f"scale={int(1920*scale_factor)}:{int(1080*scale_factor)}:flags=lanczos,"
+                f"scale={int(width*scale_factor)}:{int(height*scale_factor)}:flags=lanczos,"
                 f"rotate='{tilt_angle}*PI/180*sin(t*0.5)':c=none,"
-                f"crop=1920:1080:(iw-1920)/2:(ih-1080)/2"
+                f"crop={width}:{height}:(iw-{width})/2:(ih-{height})/2"
             )
 
         elif effect == "Dynamic Tilt":
@@ -228,11 +236,11 @@ class MotionEffectBuilder:
 
             return (
                 # Apply base scale + animated zoom
-                f"scale='1920*{base_scale}*({zoom_expr})':'1080*{base_scale}*({zoom_expr})':flags=lanczos:eval=frame,"
+                f"scale='{width}*{base_scale}*({zoom_expr})':'{height}*{base_scale}*({zoom_expr})':flags=lanczos:eval=frame,"
                 # Oscillating rotation between -max_tilt and +max_tilt degrees
                 f"rotate='{max_tilt_angle}*PI/180*sin(t*0.5)':c=none,"
-                # Crop to final 1920x1080
-                f"crop=1920:1080:(iw-1920)/2:(ih-1080)/2"
+                # Crop to final resolution
+                f"crop={width}:{height}:(iw-{width})/2:(ih-{height})/2"
             )
 
         else:
@@ -242,63 +250,67 @@ class MotionEffectBuilder:
     @staticmethod
     def _build_base_filter(
         crop_settings: Optional[Dict],
-        image_path: Optional[str]
+        image_path: Optional[str],
+        resolution: tuple = (1920, 1080)
     ) -> str:
         """
         Build base filter with crop handling
-        
+
         Args:
             crop_settings: Crop region or None
             image_path: Path to validate crop against
-            
+            resolution: Output resolution as tuple (width, height)
+
         Returns:
             Base FFmpeg filter string
         """
+        width, height = resolution
+
         if not crop_settings or not image_path:
-            return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
-        
+            return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+
         try:
             # Validate crop settings
             with Image.open(image_path) as img:
                 img_w, img_h = img.size
-                
+
             crop_x = crop_settings['x']
             crop_y = crop_settings['y']
             crop_w = crop_settings['width']
             crop_h = crop_settings['height']
-            
+
             # Validate coordinates
             if crop_x < 0 or crop_y < 0 or crop_w <= 0 or crop_h <= 0:
                 logger.warning(f"Invalid crop coordinates: {crop_settings}. Using default auto-crop.")
-                return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
-            
+                return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+
             # CRITICAL FIX: Clamp crop dimensions to image boundaries BEFORE using
             if crop_x >= img_w or crop_y >= img_h:
                 logger.warning(f"Crop position ({crop_x},{crop_y}) outside image {img_w}x{img_h}. Using default.")
-                return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
-            
+                return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+
             # Adjust if crop exceeds boundaries
             if crop_x + crop_w > img_w:
                 crop_w = img_w - crop_x
                 logger.warning(f"Crop width adjusted to {crop_w} to fit image width {img_w}")
-            
+
             if crop_y + crop_h > img_h:
                 crop_h = img_h - crop_y
                 logger.warning(f"Crop height adjusted to {crop_h} to fit image height {img_h}")
-            
+
             # Ensure minimum size
             if crop_w < 100 or crop_h < 100:
                 logger.warning(f"Crop too small ({crop_w}x{crop_h}). Using default.")
-                return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
-            
+                return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+
             # Build exact crop→scale filter
-            filter_str = f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale=1920:1080:flags=lanczos"
+            filter_str = f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale={width}:{height}:flags=lanczos"
             logger.info(f"Using custom crop: {crop_w}x{crop_h} at ({crop_x},{crop_y}) from {img_w}x{img_h}")
             logger.info("EXACT MATCH: Preview composition will be preserved in video")
-            
+
             return filter_str
-            
+
         except Exception as e:
             logger.error(f"Failed to validate crop settings: {e}")
             logger.warning("Falling back to default auto-crop")
-            return "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
+            return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
