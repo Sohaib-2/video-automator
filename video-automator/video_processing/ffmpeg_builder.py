@@ -92,8 +92,19 @@ class FFmpegCommandBuilder:
             if crop_settings:
                 logger.info("Disabling CUDA hwaccel due to custom crop (compatibility)")
         
-        # Add image inputs
-        time_per_image = duration / num_images
+        # Add image inputs with crossfade transition compensation
+        transition_duration = 1.0  # 1 second crossfade between images
+
+        if num_images == 1:
+            # Single image - no transitions
+            time_per_image = duration
+        else:
+            # Multiple images - adjust duration to account for crossfade overlaps
+            # Formula: time_per_image = (total_duration + overlap_time) / num_images
+            # Where overlap_time = (num_images - 1) * transition_duration
+            time_per_image = (duration + transition_duration * (num_images - 1)) / num_images
+            logger.info(f"📊 Adjusted time per image: {time_per_image:.2f}s (compensating for {num_images-1} crossfades)")
+
         for img_path in images:
             cmd.extend([
                 '-loop', '1',
@@ -204,10 +215,41 @@ class FFmpegCommandBuilder:
             )
             filter_parts.append(f"[{i}:v]{image_filter}[v{i}]")
         
-        # Concatenate video streams
-        concat_inputs = ''.join([f"[v{i}]" for i in range(num_images)])
-        concat_filter = f"{concat_inputs}concat=n={num_images}:v=1:a=0[vconcat]"
-        filter_parts.append(concat_filter)
+        # Apply crossfade transitions between images (if multiple images)
+        if num_images == 1:
+            # Single image - no transitions needed
+            filter_parts.append(f"[v0]copy[vconcat]")
+        else:
+            # Multiple images - apply crossfade transitions
+            # Build chain of xfade filters
+            # For N images, we need N-1 transitions
+            for i in range(num_images - 1):
+                # Calculate when this transition should start
+                # offset = time when second video should start appearing
+                offset = (i + 1) * time_per_image - transition_duration
+
+                if i == 0:
+                    # First transition: [v0][v1] -> [vx0]
+                    input1 = f"[v{i}]"
+                    input2 = f"[v{i+1}]"
+                else:
+                    # Subsequent transitions: [vx(i-1)][v(i+1)] -> [vx(i)]
+                    input1 = f"[vx{i-1}]"
+                    input2 = f"[v{i+1}]"
+
+                # Determine output label
+                if i == num_images - 2:
+                    # Last transition outputs to [vconcat]
+                    output = "[vconcat]"
+                else:
+                    # Intermediate transitions
+                    output = f"[vx{i}]"
+
+                # Build xfade filter
+                xfade_filter = f"{input1}{input2}xfade=transition=fade:duration={transition_duration}:offset={offset}{output}"
+                filter_parts.append(xfade_filter)
+
+            logger.info(f"🎬 Applied {num_images-1} crossfade transitions ({transition_duration}s each)")
         
         # Apply VIDEO-LEVEL effects AFTER concatenation
         if has_video_overlay and video_motion_filters:
