@@ -228,7 +228,7 @@ class MotionEffectBuilder:
 
             return (
                 # Apply base scale + animated zoom
-                f"scale='1920*{base_scale}*({zoom_expr})':'1080*{base_scale}*({zoom_expr})':flags=lanczos,"
+                f"scale='1920*{base_scale}*({zoom_expr})':'1080*{base_scale}*({zoom_expr})':flags=lanczos:eval=frame,"
                 # Oscillating rotation between -max_tilt and +max_tilt degrees
                 f"rotate='{max_tilt_angle}*PI/180*sin(t*0.5)':c=none,"
                 # Crop to final 1920x1080
