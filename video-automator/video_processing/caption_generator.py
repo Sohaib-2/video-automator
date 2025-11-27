@@ -53,8 +53,8 @@ class CaptionGenerator:
     @staticmethod
     def wrap_caption_text(text: str, max_line_chars: int = 40) -> str:
         """
-        Wrap long caption text by inserting line breaks at appropriate positions.
-        This ensures captions display on 2 lines when they're too long for 1 line.
+        Wrap long caption text by inserting line breaks to create balanced lines.
+        Uses an optimized algorithm that minimizes the difference in line lengths.
 
         Args:
             text: Caption text to wrap
@@ -67,34 +67,35 @@ class CaptionGenerator:
         if len(text) <= max_line_chars:
             return text
 
-        # Find the best place to break (near middle, at a space)
+        # Find the best place to break (minimize line length difference)
         words = text.split()
         if len(words) <= 1:
             # Single long word - can't wrap nicely
             return text
 
-        # Build lines by adding words until we exceed half the max length
-        target_break = len(text) // 2
-        current_line = []
-        current_length = 0
+        # Try all possible break points and find the most balanced one
+        best_break_index = 1  # Start with at least one word in first line
+        min_difference = float('inf')
 
-        for i, word in enumerate(words):
-            word_length = len(word)
+        for i in range(1, len(words)):
+            line1 = ' '.join(words[:i])
+            line2 = ' '.join(words[i:])
 
-            # Would adding this word exceed our target?
-            if current_length + word_length > target_break and current_line:
-                # Found a good breaking point
-                line1 = ' '.join(current_line)
-                line2 = ' '.join(words[i:])
-                result = f"{line1}\n{line2}"
-                logger.debug(f"Wrapped: '{text}' → '{result}'")
-                return result
+            # Calculate the difference in line lengths
+            difference = abs(len(line1) - len(line2))
 
-            current_line.append(word)
-            current_length += word_length + 1  # +1 for space
+            # Update if this is the most balanced break point so far
+            if difference < min_difference:
+                min_difference = difference
+                best_break_index = i
 
-        # If we got here, just return original (shouldn't happen)
-        return text
+        # Build the final result with the best break point
+        line1 = ' '.join(words[:best_break_index])
+        line2 = ' '.join(words[best_break_index:])
+        result = f"{line1}\n{line2}"
+
+        logger.debug(f"Wrapped (balanced): '{text}' → Line1: {len(line1)} chars, Line2: {len(line2)} chars, diff: {min_difference}")
+        return result
     
     @staticmethod
     def split_into_shorter_segments(captions: List[Dict], max_words: int = 12, max_chars: int = 50) -> List[Dict]:
