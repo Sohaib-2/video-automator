@@ -201,15 +201,21 @@ class MotionEffectBuilder:
             )
 
         elif effect == "Dynamic Tilt":
-            # DYNAMIC TILT: Fixed 20° tilt + smooth zoom in/out animation
-            # Creates movement without feeling static
+            # DYNAMIC TILT: Oscillating tilt (-20° to +20°) + smooth zoom in/out animation
+            # Creates dynamic movement with rotation
 
-            # Zoom intensity: 0-100% maps to zoom range
+            # Tilt angle based on intensity: 0-100% maps to max tilt angle
+            # At 0%: ±2° oscillation (very subtle)
+            # At 50%: ±12° oscillation (medium)
+            # At 100%: ±20° oscillation (dramatic)
+            max_tilt_angle = 2 + (intensity / 100.0) * 18  # Range: 2 to 20 degrees
+
+            # Zoom range based on intensity
             # At 50%: zoom between 1.0x and 1.15x
             # At 100%: zoom between 1.0x and 1.30x
             max_zoom = 0.15 + (intensity / 100.0) * 0.15  # Range: 0.15 to 0.30
 
-            logger.info(f"Adding Dynamic Tilt effect - Intensity: {intensity}%, Fixed 20° tilt, Zoom: 1.0x-{1.0+max_zoom:.2f}x")
+            logger.info(f"Adding Dynamic Tilt effect - Intensity: {intensity}%, Tilt: ±{max_tilt_angle:.1f}°, Zoom: 1.0x-{1.0+max_zoom:.2f}x")
 
             # Base scale factor to prevent black corners (1.3x for 20° rotation)
             base_scale = 1.3
@@ -223,8 +229,8 @@ class MotionEffectBuilder:
             return (
                 # Apply base scale + animated zoom
                 f"scale='1920*{base_scale}*({zoom_expr})':'1080*{base_scale}*({zoom_expr})':flags=lanczos,"
-                # Fixed 20° rotation (no oscillation)
-                f"rotate=20*PI/180:c=none,"
+                # Oscillating rotation between -max_tilt and +max_tilt degrees
+                f"rotate='{max_tilt_angle}*PI/180*sin(t*0.5)':c=none,"
                 # Crop to final 1920x1080
                 f"crop=1920:1080:(iw-1920)/2:(ih-1080)/2"
             )

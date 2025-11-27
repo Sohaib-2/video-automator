@@ -128,11 +128,9 @@ class EnhancedSettingsDialog(QDialog):
         # Zoom controls
         zoom_group = self._create_zoom_controls()
         left_panel.addWidget(zoom_group)
-        
-        # Motion effects
-        effects_section = self._create_motion_effects()
-        left_panel.addWidget(effects_section)
-        
+
+        left_panel.addStretch()
+
         return left_panel
     
     def _create_zoom_controls(self):
@@ -316,7 +314,7 @@ class EnhancedSettingsDialog(QDialog):
         dynamic_tilt_checkbox.stateChanged.connect(self.on_effect_changed)
         effects_layout.addWidget(dynamic_tilt_checkbox)
 
-        dynamic_tilt_desc = QLabel("   └ Fixed 20° tilt + smooth zoom in/out")
+        dynamic_tilt_desc = QLabel("   └ Oscillating tilt (±20°) + smooth zoom in/out")
         dynamic_tilt_desc.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
         effects_layout.addWidget(dynamic_tilt_desc)
 
@@ -421,7 +419,11 @@ class EnhancedSettingsDialog(QDialog):
         # Settings grid
         grid = self._create_settings_grid()
         right_panel.addLayout(grid)
-        
+
+        # Motion effects
+        effects_section = self._create_motion_effects()
+        right_panel.addWidget(effects_section)
+
         # Preview text input
         sample_group = self._create_preview_text_input()
         right_panel.addWidget(sample_group)
