@@ -110,11 +110,12 @@ class VideoProcessor:
             
             captions = self.whisper_handler.transcribe(files['voiceover'])
             
-            # Create SRT file with balanced limits for 2-line captions
-            # Max 12 words / 35 chars ensures text fits within safe margins at 48px font
+            # Create SRT file with natural wrapping approach
+            # Max 15 words / 75 chars - let FFmpeg WrapStyle=2 handle line breaks naturally
+            # This reduces caption cuts and allows text to flow smoothly to 2-3 lines
             temp_srt = os.path.join(folder_path, 'temp_captions.srt')
             text_case = self.settings.get('text_case', 'title')
-            CaptionGenerator.create_srt_file(captions, temp_srt, max_words=12, max_chars=35, text_case=text_case)
+            CaptionGenerator.create_srt_file(captions, temp_srt, max_words=15, max_chars=75, text_case=text_case)
             
             # Build and run FFmpeg command
             if progress_callback:
