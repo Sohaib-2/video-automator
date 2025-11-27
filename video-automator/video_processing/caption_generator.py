@@ -13,7 +13,26 @@ logger = logging.getLogger(__name__)
 
 class CaptionGenerator:
     """Handles SRT subtitle file generation with intelligent wrapping"""
-    
+
+    @staticmethod
+    def apply_text_case(text: str, text_case: str = 'title') -> str:
+        """
+        Apply text case transformation to caption text
+
+        Args:
+            text: Original caption text
+            text_case: Case style - 'title', 'upper', or 'normal'
+
+        Returns:
+            Transformed text
+        """
+        if text_case == 'upper':
+            return text.upper()
+        elif text_case == 'title':
+            return text.title()
+        else:  # 'normal' or any other value
+            return text
+
     @staticmethod
     def format_timestamp(seconds: float) -> str:
         """
@@ -129,7 +148,7 @@ class CaptionGenerator:
         return result
     
     @staticmethod
-    def create_srt_file(captions: List[Dict], output_path: str, split_long: bool = True, max_words: int = 12, max_chars: int = 50):
+    def create_srt_file(captions: List[Dict], output_path: str, split_long: bool = True, max_words: int = 12, max_chars: int = 50, text_case: str = 'title'):
         """
         Create SRT subtitle file from captions with intelligent splitting
 
@@ -139,6 +158,7 @@ class CaptionGenerator:
             split_long: Whether to split long captions (RECOMMENDED: True)
             max_words: Maximum words per caption (default: 12 = ~2 lines)
             max_chars: Maximum characters per caption (default: 50 = ensures 2-line wrapping)
+            text_case: Text case style - 'title', 'upper', or 'normal' (default: 'title')
         """
         # Apply smart splitting if enabled
         if split_long:
@@ -146,16 +166,19 @@ class CaptionGenerator:
             captions = CaptionGenerator.split_into_shorter_segments(captions, max_words, max_chars)
         else:
             logger.warning("⚠ Caption splitting disabled - long captions may overflow!")
-        
-        # Write SRT file
+
+        # Write SRT file with text case transformation
         with open(output_path, 'w', encoding='utf-8') as f:
             for i, caption in enumerate(captions, 1):
                 start_time = CaptionGenerator.format_timestamp(caption['start'])
                 end_time = CaptionGenerator.format_timestamp(caption['end'])
-                
+
+                # Apply text case transformation
+                caption_text = CaptionGenerator.apply_text_case(caption['text'], text_case)
+
                 f.write(f"{i}\n")
                 f.write(f"{start_time} --> {end_time}\n")
-                f.write(f"{caption['text']}\n\n")
+                f.write(f"{caption_text}\n\n")
         
         logger.info(f"✅ SRT file created: {output_path} ({len(captions)} caption segments)")
         

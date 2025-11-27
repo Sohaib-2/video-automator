@@ -113,7 +113,8 @@ class VideoProcessor:
             # Create SRT file with balanced limits for 2-line captions
             # Max 12 words / 70 chars allows natural wrapping without excessive breaks
             temp_srt = os.path.join(folder_path, 'temp_captions.srt')
-            CaptionGenerator.create_srt_file(captions, temp_srt)
+            text_case = self.settings.get('text_case', 'title')
+            CaptionGenerator.create_srt_file(captions, temp_srt, text_case=text_case)
             
             # Build and run FFmpeg command
             if progress_callback:

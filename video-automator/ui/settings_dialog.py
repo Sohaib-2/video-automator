@@ -13,6 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
 
 from video_processing import VideoProcessor
+from video_processing.caption_generator import CaptionGenerator
 from .widgets.crop_view import ImageCropView
 from .widgets.motion_preview import MotionEffectPreview
 from .styles import Styles
@@ -31,6 +32,7 @@ class EnhancedSettingsDialog(QDialog):
         default_settings = {
             'font': 'Arial Bold',
             'font_size': 48,
+            'text_case': 'title',
             'text_color': '#FFFF00',
             'bg_color': '#000000',
             'bg_opacity': 80,
@@ -419,7 +421,18 @@ class EnhancedSettingsDialog(QDialog):
         self.font_size_spin.valueChanged.connect(self.update_preview)
         grid.addWidget(self.font_size_spin, row, 1)
         row += 1
-        
+
+        # Text case
+        grid.addWidget(QLabel("Text Case:"), row, 0)
+        self.text_case_combo = QComboBox()
+        self.text_case_combo.addItems(['Title Case', 'ALL CAPS', 'Normal'])
+        text_case_map = {'title': 'Title Case', 'upper': 'ALL CAPS', 'normal': 'Normal'}
+        current_text_case = self.settings.get('text_case', 'title')
+        self.text_case_combo.setCurrentText(text_case_map.get(current_text_case, 'Title Case'))
+        self.text_case_combo.currentTextChanged.connect(self.update_preview)
+        grid.addWidget(self.text_case_combo, row, 1)
+        row += 1
+
         # Text color
         grid.addWidget(QLabel("Text Color:"), row, 0)
         self.text_color_btn = QPushButton(self.settings['text_color'])
@@ -676,7 +689,13 @@ class EnhancedSettingsDialog(QDialog):
         outline_width = self.outline_width_spin.value()
         
         sample_text = self.sample_text_input.text() or "Sample Caption Text"
-        
+
+        # Apply text case transformation
+        text_case_display = self.text_case_combo.currentText()
+        text_case_map = {'Title Case': 'title', 'ALL CAPS': 'upper', 'Normal': 'normal'}
+        text_case = text_case_map.get(text_case_display, 'title')
+        sample_text = CaptionGenerator.apply_text_case(sample_text, text_case)
+
         self.crop_view.add_caption(
             sample_text,
             font,
@@ -746,9 +765,14 @@ class EnhancedSettingsDialog(QDialog):
                     return
         
         # Update all settings
+        text_case_display = self.text_case_combo.currentText()
+        text_case_map = {'Title Case': 'title', 'ALL CAPS': 'upper', 'Normal': 'normal'}
+        text_case = text_case_map.get(text_case_display, 'title')
+
         self.settings.update({
             'font': self.font_combo.currentText(),
             'font_size': self.font_size_spin.value(),
+            'text_case': text_case,
             'bg_opacity': self.opacity_spin.value(),
             'has_background': self.has_bg_checkbox.isChecked(),
             'has_outline': self.has_outline_checkbox.isChecked(),
