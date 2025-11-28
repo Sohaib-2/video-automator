@@ -299,7 +299,7 @@ class ImageCropView(QGraphicsView):
     def get_caption_position(self):
         """Get caption position relative to crop frame (normalized 0-1)"""
         if not self.caption_item:
-            return {'x': 0.5, 'y': 0.9}  # Default bottom center
+            return {'x': 0.5, 'y': 0.95}  # Default bottom center (updated to 0.95)
         
         caption_pos = self.caption_item.pos()
         caption_rect = self.caption_item.boundingRect()
