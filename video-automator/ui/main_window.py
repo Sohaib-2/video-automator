@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
                     if 'shadow_depth' not in settings:
                         settings['shadow_depth'] = 2
                     if 'caption_position' not in settings:
-                        settings['caption_position'] = {'x': 0.5, 'y': 0.9}
+                        settings['caption_position'] = {'x': 0.5, 'y': 0.95}
                     if 'caption_width_percent' not in settings:
                         settings['caption_width_percent'] = 0.80
                     if 'video_resolution' not in settings:
@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
             'position': 'Bottom Center',
             'motion_effects': ['Static'],  # Changed to list
             'crop_settings': None,
-            'caption_position': {'x': 0.5, 'y': 0.9},
+            'caption_position': {'x': 0.5, 'y': 0.95},
             'caption_width_percent': 0.80,
             'video_resolution': '1080p'
         }
