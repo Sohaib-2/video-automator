@@ -5,12 +5,13 @@ UPDATED: Support for video overlay effects (real grain video files)
 """
 
 import logging
+import os
 import re
 from typing import List, Dict
 from .motion_effects import MotionEffectBuilder
 from .subtitle_style import SubtitleStyleBuilder
 from .utils import check_gpu_available
-from utils.resource_path import get_ffmpeg_path
+from utils.resource_path import get_ffmpeg_path, get_font_path, get_resource_path
 
 logger = logging.getLogger(__name__)
 
