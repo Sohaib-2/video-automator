@@ -450,8 +450,9 @@ class EnhancedSettingsDialog(QDialog):
         # Font
         grid.addWidget(QLabel("Font:"), row, 0)
         self.font_combo = QComboBox()
-        fonts = ['Arial', 'Arial Bold', 'Helvetica', 'Roboto', 'Montserrat', 
-                 'Open Sans', 'Lato', 'Poppins', 'Oswald', 'Raleway']
+        fonts = ['Arial', 'Arial Bold', 'Helvetica', 'Roboto', 'Montserrat',
+                 'Open Sans', 'Lato', 'Poppins', 'Oswald', 'Raleway',
+                 'EB Garamond', 'EB Garamond Bold']
         self.font_combo.addItems(fonts)
         self.font_combo.setCurrentText(self.settings['font'])
         self.font_combo.currentTextChanged.connect(self.update_preview)

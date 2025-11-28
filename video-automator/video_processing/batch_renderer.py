@@ -19,6 +19,7 @@ from .utils import (
     validate_folder,
     get_audio_duration
 )
+from utils.resource_path import get_resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -134,14 +135,31 @@ class VideoProcessor:
             
             logger.info("Running FFmpeg...")
             logger.info(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
-            
+
+            # Prepare environment for bundled fonts (EB Garamond)
+            env = os.environ.copy()
+            font = self.settings.get('font', 'Arial Bold')
+
+            if 'EB Garamond' in font:
+                # Use bundled EB Garamond fonts by setting fontconfig file
+                fonts_dir = get_resource_path('resources/fonts')
+                fonts_conf = os.path.join(fonts_dir, 'fonts.conf')
+
+                if os.path.exists(fonts_conf):
+                    # Set fontconfig to use our custom configuration
+                    env['FONTCONFIG_FILE'] = fonts_conf
+                    env['FONTCONFIG_PATH'] = fonts_dir
+                    logger.info(f"Using bundled EB Garamond fonts from: {fonts_dir}")
+                    logger.info(f"Fontconfig file: {fonts_conf}")
+
             # Execute FFmpeg with progress tracking
             process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 universal_newlines=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
             
             last_update_progress = 0

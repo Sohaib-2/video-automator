@@ -46,7 +46,7 @@ def get_ffmpeg_path():
 def get_ffprobe_path():
     """
     Get FFprobe executable path, checks bundled location first
-    
+
     Returns:
         Path to ffprobe executable or 'ffprobe' (system PATH)
     """
@@ -54,6 +54,31 @@ def get_ffprobe_path():
     bundled_ffprobe = get_resource_path('ffprobe.exe')
     if os.path.exists(bundled_ffprobe):
         return bundled_ffprobe
-    
+
     # Fallback to system PATH
     return 'ffprobe'
+
+
+def get_font_path(font_name):
+    """
+    Get bundled font file path for EB Garamond fonts
+
+    Args:
+        font_name: Font name (e.g., 'EB Garamond', 'EB Garamond Bold')
+
+    Returns:
+        Absolute path to font file if bundled, None otherwise
+    """
+    # Map font names to TTF files
+    font_files = {
+        'EB Garamond': 'resources/fonts/EBGaramond-Regular.ttf',
+        'EB Garamond Bold': 'resources/fonts/EBGaramond-Bold.ttf'
+    }
+
+    if font_name in font_files:
+        font_path = get_resource_path(font_files[font_name])
+        if os.path.exists(font_path):
+            return font_path
+
+    # Not a bundled font or file doesn't exist
+    return None
