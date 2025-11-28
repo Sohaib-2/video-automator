@@ -208,7 +208,10 @@ class ImageCropView(QGraphicsView):
         outline_width: int = 3
     ):
         """Add draggable caption to preview with outline support and safe zone constraints"""
+        # Save old caption position before removing it (to preserve visual position on font changes)
+        old_position = None
         if self.caption_item:
+            old_position = self.caption_item.pos()
             self.scene.removeItem(self.caption_item)
 
         self.caption_item = DraggableCaptionItem(text)
@@ -288,13 +291,18 @@ class ImageCropView(QGraphicsView):
         
         self.scene.addItem(self.caption_item)
         self.caption_item.setZValue(200)  # On top of everything
-        
-        # Position at bottom center by default
-        caption_rect = self.caption_item.boundingRect()
-        crop_rect = self.crop_frame.rect()
-        x = crop_rect.center().x() - caption_rect.width() / 2
-        y = crop_rect.bottom() - caption_rect.height() - 80
-        self.caption_item.setPos(x, y)
+
+        # Position caption: restore old position if it existed, otherwise use default
+        if old_position is not None:
+            # Restore previous visual position (preserves position when font/style changes)
+            self.caption_item.setPos(old_position)
+        else:
+            # Position at bottom center by default (first time caption is added)
+            caption_rect = self.caption_item.boundingRect()
+            crop_rect = self.crop_frame.rect()
+            x = crop_rect.center().x() - caption_rect.width() / 2
+            y = crop_rect.bottom() - caption_rect.height() - 80
+            self.caption_item.setPos(x, y)
     
     def get_caption_position(self):
         """Get caption position relative to crop frame (normalized 0-1)"""
