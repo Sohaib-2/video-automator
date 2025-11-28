@@ -783,7 +783,21 @@ class EnhancedSettingsDialog(QDialog):
             outline_color,
             outline_width
         )
-    
+
+        # Reapply saved caption position after creating new caption
+        # This ensures position is preserved when font or other settings change
+        caption_pos = self.settings.get('caption_position', None)
+        if caption_pos and self.crop_view.caption_item:
+            crop_rect = self.crop_view.crop_frame.rect()
+            x = crop_rect.x() + caption_pos['x'] * crop_rect.width()
+            y = crop_rect.y() + caption_pos['y'] * crop_rect.height()
+
+            caption_rect = self.crop_view.caption_item.boundingRect()
+            x = x - caption_rect.width() / 2
+            y = y - caption_rect.height() / 2
+
+            self.crop_view.caption_item.setPos(x, y)
+
     def choose_text_color(self):
         """Choose text color"""
         color = QColorDialog.getColor()
