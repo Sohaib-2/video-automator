@@ -122,6 +122,13 @@ class MainWindow(QMainWindow):
                         settings['shadow_depth'] = 2
                     if 'caption_position' not in settings:
                         settings['caption_position'] = {'x': 0.5, 'y': 0.95}
+                    else:
+                        # MIGRATION: Update old y:0.9 position to new y:0.95 default
+                        caption_pos = settings['caption_position']
+                        if isinstance(caption_pos, dict) and 'y' in caption_pos:
+                            # If y is close to 0.9 (within 0.02), update to 0.95
+                            if 0.88 <= caption_pos['y'] <= 0.92:
+                                settings['caption_position']['y'] = 0.95
                     if 'caption_width_percent' not in settings:
                         settings['caption_width_percent'] = 0.80
                     if 'video_resolution' not in settings:
