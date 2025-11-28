@@ -83,7 +83,7 @@ class SubtitleStyleBuilder:
             border_style = 1  # Outline + shadow
         
         # Position settings
-        caption_pos = self.settings.get('caption_position', {'x': 0.5, 'y': 0.9})
+        caption_pos = self.settings.get('caption_position', {'x': 0.5, 'y': 0.95})
         x_norm = caption_pos['x']
         y_norm = caption_pos['y']
         

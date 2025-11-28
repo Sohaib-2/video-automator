@@ -45,7 +45,7 @@ class EnhancedSettingsDialog(QDialog):
             'motion_effects': ['Static'],
             'motion_effect_intensities': {'Noise': 50, 'Tilt': 50, 'Dynamic Tilt': 50},
             'crop_settings': None,
-            'caption_position': {'x': 0.5, 'y': 0.9},
+            'caption_position': {'x': 0.5, 'y': 0.95},
             'preview_text': 'Sample Caption Text',
             'caption_width_percent': 0.80,
             'video_resolution': '1080p'
