@@ -198,10 +198,17 @@ class MotionEffectBuilder:
             # Range: 0.3° (barely noticeable) to 5° (quite dramatic)
             tilt_angle = 0.3 + (intensity / 100.0) * 4.7
 
-            logger.info(f"Adding Tilt effect - Intensity: {intensity}%, Max Angle: {tilt_angle:.1f}°")
+            # INTENSITY-BASED ZOOM: Less rotation = less zoom needed = less cropping
+            # At 0% intensity (0.3°): 1.02x zoom (minimal crop)
+            # At 50% intensity (~2.65°): 1.08x zoom (moderate crop)
+            # At 100% intensity (5°): 1.15x zoom (maximum crop)
+            min_scale = 1.02  # Minimum zoom for tiny rotations
+            max_scale = 1.15  # Maximum zoom for large rotations
+            scale_factor = min_scale + (intensity / 100.0) * (max_scale - min_scale)
+
+            logger.info(f"Adding Tilt effect - Intensity: {intensity}%, Angle: {tilt_angle:.1f}°, Zoom: {scale_factor:.2f}x")
 
             # Pre-scale to avoid black edges during rotation
-            scale_factor = 1.15  # Scale up 15% to ensure no black edges
             return (
                 f"scale={int(width*scale_factor)}:{int(height*scale_factor)}:flags=lanczos,"
                 f"rotate='{tilt_angle}*PI/180*sin(t*0.5)':c=none,"
@@ -218,15 +225,20 @@ class MotionEffectBuilder:
             # At 100%: ±10° oscillation (dramatic but not excessive)
             max_tilt_angle = 1 + (intensity / 100.0) * 9  # Range: 1 to 10 degrees
 
-            # Zoom range based on intensity
+            # INTENSITY-BASED BASE ZOOM: Less rotation = less base zoom needed
+            # At 0% intensity (±1°): 1.05x base (minimal crop)
+            # At 50% intensity (±5.5°): 1.18x base (moderate crop)
+            # At 100% intensity (±10°): 1.30x base (maximum crop)
+            min_base_scale = 1.05
+            max_base_scale = 1.30
+            base_scale = min_base_scale + (intensity / 100.0) * (max_base_scale - min_base_scale)
+
+            # Animated zoom range based on intensity
             # At 50%: zoom between 1.0x and 1.15x
             # At 100%: zoom between 1.0x and 1.30x
-            max_zoom = 0.15 + (intensity / 100.0) * 0.15  # Range: 0.15 to 0.30
+            max_zoom = 0.10 + (intensity / 100.0) * 0.20  # Range: 0.10 to 0.30
 
-            logger.info(f"Adding Dynamic Tilt effect - Intensity: {intensity}%, Tilt: ±{max_tilt_angle:.1f}°, Zoom: 1.0x-{1.0+max_zoom:.2f}x")
-
-            # Base scale factor to prevent black corners (1.3x for 20° rotation)
-            base_scale = 1.3
+            logger.info(f"Adding Dynamic Tilt effect - Intensity: {intensity}%, Tilt: ±{max_tilt_angle:.1f}°, Base Zoom: {base_scale:.2f}x, Animated: 1.0x-{1.0+max_zoom:.2f}x")
 
             # Zoom formula: smooth sine wave completing one cycle over duration
             # zoom(t) = 1.0 + max_zoom * (0.5 - 0.5*cos(2*PI*t/duration))
