@@ -89,10 +89,10 @@ class FFmpegCommandBuilder:
         ffmpeg_cmd = get_ffmpeg_path()
         cmd = [ffmpeg_cmd, '-y']
         
-        # Hardware acceleration (always enabled when GPU available since we auto-fit all images)
-        if use_gpu and check_gpu_available():
-            cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
-            logger.info("Using CUDA hardware acceleration for decoding")
+        # Hardware acceleration - disabled for compatibility with auto-fit scaling
+        # CUDA hwaccel causes "Function not implemented" errors with scale/crop filters
+        # Keep disabled to ensure filter chain works correctly
+        logger.info("CUDA hwaccel disabled for filter compatibility (auto-fit scaling)")
 
         # Track input indices
         current_input_index = 0
