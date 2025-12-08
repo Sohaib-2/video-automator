@@ -90,13 +90,9 @@ class FFmpegCommandBuilder:
         cmd = [ffmpeg_cmd, '-y']
         
         # Hardware acceleration
-        crop_settings = self.settings.get('crop_settings', None)
-        if use_gpu and check_gpu_available() and not crop_settings:
+        if use_gpu and check_gpu_available():
             cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
             logger.info("Using CUDA hardware acceleration for decoding")
-        else:
-            if crop_settings:
-                logger.info("Disabling CUDA hwaccel due to custom crop (compatibility)")
 
         # Track input indices
         current_input_index = 0
@@ -249,13 +245,14 @@ class FFmpegCommandBuilder:
                 logger.info(f"🔗 Concatenating {num_intro_videos} intro videos")
 
         # Process each image - NO motion effects, just crop/scale
+        # Always use auto-fit (crop_settings=None) for all images
         for i, img_path in enumerate(images):
             image_input_index = image_start_index + i
             image_filter = MotionEffectBuilder.build_filter(
                 "Static",  # Not used in new version
                 time_per_image,
                 fps,
-                crop_settings,
+                None,  # Always auto-fit, don't use saved crop settings
                 img_path,
                 self.config.resolution
             )
