@@ -161,20 +161,7 @@ class EnhancedSettingsDialog(QDialog):
         self.zoom_in_btn.setStyleSheet(Styles.BUTTON_ZOOM_IN)
         self.zoom_in_btn.clicked.connect(self.on_zoom_in)
         zoom_buttons_layout.addWidget(self.zoom_in_btn)
-        
-        # Auto-fit and Reset buttons
-        autofit_btn = QPushButton("📐 Auto-Fit")
-        autofit_btn.setFixedSize(100, 50)
-        autofit_btn.setStyleSheet(Styles.BUTTON_AUTO_FIT)
-        autofit_btn.clicked.connect(self.on_auto_fit)
-        zoom_buttons_layout.addWidget(autofit_btn)
-        
-        reset_btn = QPushButton("🔄 Reset")
-        reset_btn.setFixedSize(80, 50)
-        reset_btn.setStyleSheet(Styles.BUTTON_RESET)
-        reset_btn.clicked.connect(self.on_reset_view)
-        zoom_buttons_layout.addWidget(reset_btn)
-        
+
         zoom_buttons_layout.addStretch()
         zoom_layout.addLayout(zoom_buttons_layout)
         
@@ -722,17 +709,7 @@ class EnhancedSettingsDialog(QDialog):
         """Handle zoom out button"""
         zoom = self.crop_view.zoom_out()
         self.zoom_label.setText(f"{zoom:.1f}x")
-    
-    def on_reset_view(self):
-        """Reset view to default"""
-        zoom = self.crop_view.reset_view()
-        self.zoom_label.setText(f"{zoom:.1f}x")
-    
-    def on_auto_fit(self):
-        """Handle auto-fit button"""
-        zoom = self.crop_view.auto_fit_to_frame()
-        self.zoom_label.setText(f"{zoom:.1f}x")
-    
+
     def on_bg_toggle(self):
         """Handle background toggle"""
         has_bg = self.has_bg_checkbox.isChecked()
