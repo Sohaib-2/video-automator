@@ -618,5 +618,56 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(
                     f"✅ Added {total_added} videos from {len(folders)} parent folder(s)"
                 )
-        
+
         event.acceptProposedAction()
+
+    def closeEvent(self, event):
+        """Handle application close - cleanup threads and resources"""
+        print("[CLEANUP] Application closing - cleaning up resources...")
+
+        # Check if render thread is running
+        if self.render_thread and self.render_thread.isRunning():
+            print("[CLEANUP] Render thread is running - attempting graceful shutdown...")
+
+            # Ask user if they want to stop rendering
+            reply = QMessageBox.question(
+                self,
+                'Rendering in Progress',
+                'Video rendering is in progress. Stop rendering and exit?',
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.No:
+                print("[CLEANUP] User cancelled exit - continuing render")
+                event.ignore()
+                return
+
+            print("[CLEANUP] Stopping render thread...")
+
+            # Request thread to stop (QThread doesn't have a built-in stop mechanism)
+            # We'll wait for it to finish with timeout
+            self.render_thread.requestInterruption()
+
+            # Wait for thread to finish (max 2 seconds)
+            if not self.render_thread.wait(2000):
+                print("[CLEANUP] Thread didn't stop gracefully - terminating...")
+                self.render_thread.terminate()
+                self.render_thread.wait(1000)
+
+            print("[CLEANUP] Render thread stopped")
+
+        # Save settings before exit
+        try:
+            self.save_settings()
+            print("[CLEANUP] Settings saved successfully")
+        except Exception as e:
+            print(f"[CLEANUP] Warning: Failed to save settings: {e}")
+
+        # Accept the close event
+        print("[CLEANUP] Cleanup complete - exiting application")
+        event.accept()
+
+        # Force quit application
+        from PyQt5.QtWidgets import QApplication
+        QApplication.quit()

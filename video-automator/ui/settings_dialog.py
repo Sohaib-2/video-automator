@@ -632,14 +632,15 @@ class EnhancedSettingsDialog(QDialog):
     def load_preview(self):
         """Load preview image and setup view with saved settings"""
         if self.sample_image:
-            # Load image into crop view
+            # Load image into crop view (auto-fits by default)
             self.crop_view.load_image(self.sample_image)
-            
-            # Apply saved crop settings if available
-            crop_settings = self.settings.get('crop_settings', None)
-            if crop_settings:
-                self.apply_crop_settings_to_preview(crop_settings)
-            
+
+            # NOTE: Always start with auto-fit view (ignore saved crop settings)
+            # User can manually adjust if needed, but default view is always auto-fitted
+            # crop_settings = self.settings.get('crop_settings', None)
+            # if crop_settings:
+            #     self.apply_crop_settings_to_preview(crop_settings)
+
             # Update caption preview
             self.update_preview()
             
