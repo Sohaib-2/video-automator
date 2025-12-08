@@ -40,20 +40,25 @@ class FFmpegCommandBuilder:
     ) -> List[str]:
         """
         Build complete FFmpeg command for video assembly
-        
+
         Args:
-            files: Dict with 'images', 'voiceover' paths
+            files: Dict with 'images', 'voiceover', 'intro_videos' paths
             srt_path: Path to SRT subtitle file
             duration: Total video duration in seconds
             output_path: Output video file path
             use_gpu: Whether to use GPU acceleration
-            
+
         Returns:
             List of FFmpeg command arguments
         """
         images = files['images']
+        intro_videos = files.get('intro_videos', [])
         num_images = len(images)
+        num_intro_videos = len(intro_videos)
         fps = self.config.fps
+
+        if num_intro_videos > 0:
+            logger.info(f"🎬 Found {num_intro_videos} intro video(s) - will add at start")
         
         # Build subtitle style
         style_builder = SubtitleStyleBuilder(self.settings, self.config.resolution)
@@ -92,7 +97,19 @@ class FFmpegCommandBuilder:
         else:
             if crop_settings:
                 logger.info("Disabling CUDA hwaccel due to custom crop (compatibility)")
-        
+
+        # Track input indices
+        current_input_index = 0
+
+        # Add intro videos FIRST (if any)
+        intro_start_index = 0
+        if num_intro_videos > 0:
+            intro_start_index = current_input_index
+            for intro_path in intro_videos:
+                cmd.extend(['-i', intro_path])
+                current_input_index += 1
+                logger.info(f"📹 Added intro video input [{current_input_index-1}]: {intro_path}")
+
         # Add image inputs with crossfade transition compensation
         transition_duration = 1.0  # 1 second crossfade between images
 
@@ -106,6 +123,7 @@ class FFmpegCommandBuilder:
             time_per_image = (duration + transition_duration * (num_images - 1)) / num_images
             logger.info(f"📊 Adjusted time per image: {time_per_image:.2f}s (compensating for {num_images-1} crossfades)")
 
+        image_start_index = current_input_index
         for img_path in images:
             cmd.extend([
                 '-loop', '1',
@@ -113,9 +131,12 @@ class FFmpegCommandBuilder:
                 '-t', str(time_per_image),
                 '-i', img_path
             ])
-        
+            current_input_index += 1
+
         # Add audio input
+        audio_input_index = current_input_index
         cmd.extend(['-i', files['voiceover']])
+        current_input_index += 1
         
         # Build motion effects and detect video overlay
         video_motion_result = MotionEffectBuilder.build_video_level_filters(
@@ -151,17 +172,18 @@ class FFmpegCommandBuilder:
                             'opacity': float(overlay_parts[2]),
                             'duration': float(overlay_parts[3])
                         }
-                        
+
                         # Add grain video input with looping
-                        grain_input_index = num_images + 1
+                        grain_input_index = current_input_index
                         grain_path = video_overlay_info['path']
-                        
+
                         cmd.extend([
                             '-stream_loop', '-1',
                             '-i', grain_path,
                             '-t', str(duration)
                         ])
-                        
+                        current_input_index += 1
+
                         logger.info(f"✨ Added GRAIN OVERLAY: {grain_path} at index {grain_input_index}")
                         logger.info(f"   Opacity: {video_overlay_info['opacity']:.2f}")
                     
@@ -180,17 +202,18 @@ class FFmpegCommandBuilder:
                         'opacity': float(parts[2]),
                         'duration': float(parts[3])
                     }
-                    
+
                     # Add grain video input with looping
-                    grain_input_index = num_images + 1
+                    grain_input_index = current_input_index
                     grain_path = video_overlay_info['path']
-                    
+
                     cmd.extend([
                         '-stream_loop', '-1',
                         '-i', grain_path,
                         '-t', str(duration)
                     ])
-                    
+                    current_input_index += 1
+
                     logger.info(f"✨ Added REAL GRAIN OVERLAY: {grain_path} at index {grain_input_index}")
                     logger.info(f"   Opacity: {video_overlay_info['opacity']:.2f} | Duration: {duration:.2f}s")
                 else:
@@ -203,9 +226,31 @@ class FFmpegCommandBuilder:
         
         # Build filter complex
         filter_parts = []
-        
+
+        # Process intro videos FIRST (crop to 16:9, mute)
+        intro_streams = []
+        if num_intro_videos > 0:
+            width, height = self.config.resolution
+            for i in range(num_intro_videos):
+                input_index = intro_start_index + i
+                # Crop/scale intro video to 16:9 (same as image autofit)
+                intro_filter = f"[{input_index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={fps}[intro{i}]"
+                filter_parts.append(intro_filter)
+                intro_streams.append(f"[intro{i}]")
+                logger.info(f"🎬 Processing intro video {i}: crop to {width}x{height}")
+
+            # Concatenate all intro videos together
+            if num_intro_videos == 1:
+                intro_concat_output = "[intro0]"
+            else:
+                concat_inputs = ''.join(intro_streams)
+                intro_concat_output = "[vintro]"
+                filter_parts.append(f"{concat_inputs}concat=n={num_intro_videos}:v=1:a=0{intro_concat_output}")
+                logger.info(f"🔗 Concatenating {num_intro_videos} intro videos")
+
         # Process each image - NO motion effects, just crop/scale
         for i, img_path in enumerate(images):
+            image_input_index = image_start_index + i
             image_filter = MotionEffectBuilder.build_filter(
                 "Static",  # Not used in new version
                 time_per_image,
@@ -214,12 +259,12 @@ class FFmpegCommandBuilder:
                 img_path,
                 self.config.resolution
             )
-            filter_parts.append(f"[{i}:v]{image_filter}[v{i}]")
+            filter_parts.append(f"[{image_input_index}:v]{image_filter}[v{i}]")
         
         # Apply crossfade transitions between images (if multiple images)
         if num_images == 1:
             # Single image - no transitions needed
-            filter_parts.append(f"[v0]copy[vconcat]")
+            filter_parts.append(f"[v0]copy[vimages]")
         else:
             # Multiple images - apply crossfade transitions
             # Build chain of xfade filters
@@ -240,8 +285,8 @@ class FFmpegCommandBuilder:
 
                 # Determine output label
                 if i == num_images - 2:
-                    # Last transition outputs to [vconcat]
-                    output = "[vconcat]"
+                    # Last transition outputs to [vimages]
+                    output = "[vimages]"
                 else:
                     # Intermediate transitions
                     output = f"[vx{i}]"
@@ -251,6 +296,15 @@ class FFmpegCommandBuilder:
                 filter_parts.append(xfade_filter)
 
             logger.info(f"🎬 Applied {num_images-1} crossfade transitions ({transition_duration}s each)")
+
+        # Concatenate intro videos with image slideshow
+        if num_intro_videos > 0:
+            # Merge intro sequence + image sequence
+            filter_parts.append(f"{intro_concat_output}[vimages]concat=n=2:v=1:a=0[vconcat]")
+            logger.info(f"🔗 Concatenating intro videos + image slideshow")
+        else:
+            # No intro videos, just rename vimages to vconcat
+            filter_parts.append(f"[vimages]copy[vconcat]")
         
         # Apply VIDEO-LEVEL effects AFTER concatenation
         if has_video_overlay and video_motion_filters:
@@ -329,10 +383,10 @@ class FFmpegCommandBuilder:
         # Combine all filters
         filter_complex = ';'.join(filter_parts)
         cmd.extend(['-filter_complex', filter_complex])
-        
+
         # Map outputs
         cmd.extend(['-map', '[vout]'])
-        cmd.extend(['-map', f'{num_images}:a'])  # Audio from original position
+        cmd.extend(['-map', f'{audio_input_index}:a'])  # Audio from voiceover
         
         # Bitrate calculation - adjust based on effects
         has_motion = any(e != "Static" for e in motion_effects)
