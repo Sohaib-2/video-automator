@@ -88,14 +88,11 @@ class FFmpegCommandBuilder:
         # Start command
         ffmpeg_cmd = get_ffmpeg_path()
         cmd = [ffmpeg_cmd, '-y']
-
+        
         # Hardware acceleration
-        # Disable CUDA when intro videos present (filter chain compatibility)
-        if use_gpu and check_gpu_available() and num_intro_videos == 0:
+        if use_gpu and check_gpu_available():
             cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
             logger.info("Using CUDA hardware acceleration for decoding")
-        elif num_intro_videos > 0:
-            logger.info("CUDA hwaccel disabled (intro videos require CPU decoding for filter compatibility)")
 
         # Track input indices
         current_input_index = 0
