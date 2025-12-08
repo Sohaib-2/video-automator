@@ -153,13 +153,16 @@ class VideoProcessor:
                     logger.info(f"Fontconfig file: {fonts_conf}")
 
             # Execute FFmpeg with progress tracking
+            # close_fds=True prevents Qt QSocketNotifier warnings when running from QThread
             process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 universal_newlines=True,
                 bufsize=1,
-                env=env
+                env=env,
+                close_fds=True,
+                start_new_session=True
             )
             
             last_update_progress = 0

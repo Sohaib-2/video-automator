@@ -121,6 +121,10 @@ class FFmpegCommandBuilder:
 
         image_start_index = current_input_index
         for img_path in images:
+            # Apply CUDA hardware acceleration ONLY to image inputs (not intro videos)
+            if use_gpu and check_gpu_available():
+                cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
+
             cmd.extend([
                 '-loop', '1',
                 '-framerate', str(fps),
@@ -128,6 +132,12 @@ class FFmpegCommandBuilder:
                 '-i', img_path
             ])
             current_input_index += 1
+
+        # Log hardware acceleration status
+        if use_gpu and check_gpu_available():
+            logger.info(f"✅ CUDA hardware acceleration enabled for {len(images)} image input(s)")
+            if num_intro_videos > 0:
+                logger.info(f"📹 Intro videos ({num_intro_videos}) using CPU decoding for filter compatibility")
 
         # Add audio input
         audio_input_index = current_input_index
