@@ -41,6 +41,7 @@ class EnhancedSettingsDialog(QDialog):
             'outline_color': '#000000',
             'outline_width': 3,
             'shadow_depth': 2,
+            'italic_text': False,
             'position': 'Bottom Center',
             'motion_effects': ['Static'],
             'motion_effect_intensities': {'Noise': 50, 'Tilt': 50, 'Dynamic Tilt': 50},
@@ -493,13 +494,23 @@ class EnhancedSettingsDialog(QDialog):
         grid.addLayout(text_preset_layout, row, 1)
         row += 1
         
-        # Background enable/disable
+        # Background enable/disable + Italic
         grid.addWidget(QLabel("Background:"), row, 0)
+        bg_italic_layout = QHBoxLayout()
         self.has_bg_checkbox = QCheckBox("Enable Background")
         saved_has_bg = self.settings.get('has_background', True)
         self.has_bg_checkbox.setChecked(saved_has_bg)
         self.has_bg_checkbox.stateChanged.connect(self.on_bg_toggle)
-        grid.addWidget(self.has_bg_checkbox, row, 1)
+        bg_italic_layout.addWidget(self.has_bg_checkbox)
+
+        self.italic_checkbox = QCheckBox("Italic")
+        saved_italic = self.settings.get('italic_text', False)
+        self.italic_checkbox.setChecked(saved_italic)
+        self.italic_checkbox.stateChanged.connect(self.update_preview)
+        bg_italic_layout.addWidget(self.italic_checkbox)
+        bg_italic_layout.addStretch()
+
+        grid.addLayout(bg_italic_layout, row, 1)
         row += 1
         
         # Background color
@@ -840,6 +851,7 @@ class EnhancedSettingsDialog(QDialog):
             'outline_color': self.settings.get('outline_color', '#000000'),
             'outline_width': self.outline_width_spin.value(),
             'shadow_depth': self.settings.get('shadow_depth', 2),
+            'italic_text': self.italic_checkbox.isChecked(),
             'crop_settings': crop_region,
             'caption_position': caption_pos,
             'preview_text': self.sample_text_input.text(),

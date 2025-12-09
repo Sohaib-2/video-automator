@@ -46,8 +46,11 @@ class SubtitleStyleBuilder:
         
         font_safe = font_base.replace(',', '').replace("'", '').replace('"', '')
         font_size = self.settings.get('font_size', 48)
-        
-        logger.info(f"Font: {font_safe} (Bold: {is_bold}), Size: {font_size}px")
+
+        # Italic setting
+        is_italic = -1 if self.settings.get('italic_text', False) else 0
+
+        logger.info(f"Font: {font_safe} (Bold: {is_bold}, Italic: {is_italic}), Size: {font_size}px")
         
         # Color conversion to ASS format
         text_color = self._convert_color(self.settings.get('text_color', '#FFFF00'))
@@ -156,6 +159,7 @@ class SubtitleStyleBuilder:
             f"FontName={font_safe},"
             f"FontSize={font_size},"
             f"Bold={is_bold},"
+            f"Italic={is_italic},"
             f"PrimaryColour={text_color},"
             f"BackColour={bg_color},"
             f"OutlineColour={outline_color},"
