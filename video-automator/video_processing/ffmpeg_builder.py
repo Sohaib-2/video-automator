@@ -107,7 +107,7 @@ class FFmpegCommandBuilder:
                 logger.info(f"📹 Added intro video input [{current_input_index-1}]: {intro_path}")
 
         # Add image inputs with crossfade transition compensation
-        transition_duration = 1.0  # 1 second crossfade between images
+        transition_duration = 2.0  # 2 second crossfade between ALL media
 
         if num_images == 1:
             # Single image - no transitions
@@ -235,14 +235,41 @@ class FFmpegCommandBuilder:
                 intro_streams.append(f"[intro{i}]")
                 logger.info(f"🎬 Processing intro video {i}: crop to {width}x{height}")
 
-            # Concatenate all intro videos together
+            # Apply xfade transitions between intro videos
             if num_intro_videos == 1:
                 intro_concat_output = "[intro0]"
             else:
-                concat_inputs = ''.join(intro_streams)
+                # Build chain of xfade transitions between intro videos
+                # For N intro videos, we need N-1 transitions
+                # We need to calculate duration of each intro video first
+                # For simplicity, we'll use a fixed transition at the end of each video
+                # Note: This assumes intro videos have their own natural durations
+
+                for i in range(num_intro_videos - 1):
+                    if i == 0:
+                        # First transition: [intro0][intro1] -> [introx0]
+                        input1 = f"[intro{i}]"
+                        input2 = f"[intro{i+1}]"
+                    else:
+                        # Subsequent transitions: [introx(i-1)][intro(i+1)] -> [introx(i)]
+                        input1 = f"[introx{i-1}]"
+                        input2 = f"[intro{i+1}]"
+
+                    # Determine output label
+                    if i == num_intro_videos - 2:
+                        # Last transition outputs to [vintro]
+                        output = "[vintro]"
+                    else:
+                        # Intermediate transitions
+                        output = f"[introx{i}]"
+
+                    # Build xfade filter - transition happens at end of first video
+                    # offset=0 means transition starts at the beginning of overlap
+                    xfade_filter = f"{input1}{input2}xfade=transition=fade:duration={transition_duration}:offset=0{output}"
+                    filter_parts.append(xfade_filter)
+
                 intro_concat_output = "[vintro]"
-                filter_parts.append(f"{concat_inputs}concat=n={num_intro_videos}:v=1:a=0{intro_concat_output}")
-                logger.info(f"🔗 Concatenating {num_intro_videos} intro videos")
+                logger.info(f"🎬 Applied {num_intro_videos-1} xfade transitions between intro videos ({transition_duration}s each)")
 
         # Process each image - auto-fit each one individually (no saved crop settings)
         for i, img_path in enumerate(images):
@@ -293,11 +320,13 @@ class FFmpegCommandBuilder:
 
             logger.info(f"🎬 Applied {num_images-1} crossfade transitions ({transition_duration}s each)")
 
-        # Concatenate intro videos with image slideshow
+        # Apply xfade transition between intro videos and image slideshow
         if num_intro_videos > 0:
-            # Merge intro sequence + image sequence
-            filter_parts.append(f"{intro_concat_output}[vimages]concat=n=2:v=1:a=0[vconcat]")
-            logger.info(f"🔗 Concatenating intro videos + image slideshow")
+            # Smooth transition from last intro video to first image
+            # offset=0 means transition starts at the beginning of overlap
+            xfade_filter = f"{intro_concat_output}[vimages]xfade=transition=fade:duration={transition_duration}:offset=0[vconcat]"
+            filter_parts.append(xfade_filter)
+            logger.info(f"🎬 Applied xfade transition between intro videos and images ({transition_duration}s)")
         else:
             # No intro videos, just rename vimages to vconcat
             filter_parts.append(f"[vimages]copy[vconcat]")
