@@ -58,7 +58,7 @@ class FFmpegCommandBuilder:
         fps = self.config.fps
 
         if num_intro_videos > 0:
-            logger.info(f"🎬 Found {num_intro_videos} intro video(s) - will add at start")
+            logger.info(f"[INTRO] Found {num_intro_videos} intro video(s) - will add at start")
         
         # Build subtitle style
         style_builder = SubtitleStyleBuilder(self.settings, self.config.resolution)

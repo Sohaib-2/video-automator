@@ -126,7 +126,7 @@ class CaptionGenerator:
             # Quick check: Does it already fit nicely?
             if len(words) <= max_words and len(text) <= max_chars:
                 result.append(caption)
-                logger.debug(f"✓ Caption OK: '{text}' ({len(words)} words, {len(text)} chars)")
+                logger.debug(f"[OK] Caption OK: '{text}' ({len(words)} words, {len(text)} chars)")
                 continue
             
             # Need to split - build chunks with BOTH limits
@@ -174,7 +174,7 @@ class CaptionGenerator:
             
             # Safety check
             if not chunks:
-                logger.warning(f"⚠ No chunks created for: '{text}' - using original")
+                logger.warning(f"[WARN] No chunks created for: '{text}' - using original")
                 result.append(caption)
                 continue
             
@@ -198,9 +198,9 @@ class CaptionGenerator:
                 logger.debug(f"  → Timing: {chunk_words} words = {chunk_proportion:.1%} of time ({chunk_duration:.2f}s)")
                 current_time += chunk_duration
 
-            logger.info(f"✂ Split: '{text[:40]}...' → {len(chunks)} segments (proportional timing)")
+            logger.info(f"[SPLIT] Split: '{text[:40]}...' -> {len(chunks)} segments (proportional timing)")
         
-        logger.info(f"📊 Caption splitting: {len(captions)} original → {len(result)} final segments")
+        logger.info(f"[STATS] Caption splitting: {len(captions)} original -> {len(result)} final segments")
         return result
     
     @staticmethod
@@ -218,10 +218,10 @@ class CaptionGenerator:
         """
         # Apply smart splitting if enabled
         if split_long:
-            logger.info("🔧 Applying HYBRID caption splitting (word + char limits)...")
+            logger.info("[PROCESS] Applying HYBRID caption splitting (word + char limits)...")
             captions = CaptionGenerator.split_into_shorter_segments(captions, max_words, max_chars)
         else:
-            logger.warning("⚠ Caption splitting disabled - long captions may overflow!")
+            logger.warning("[WARN] Caption splitting disabled - long captions may overflow!")
 
         # Write SRT file with text case transformation and wrapping
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -239,9 +239,9 @@ class CaptionGenerator:
                 f.write(f"{start_time} --> {end_time}\n")
                 f.write(f"{caption_text}\n\n")
         
-        logger.info(f"✅ SRT file created: {output_path} ({len(captions)} caption segments)")
-        
+        logger.info(f"[OK] SRT file created: {output_path} ({len(captions)} caption segments)")
+
         # Log sample
         if captions:
             sample = captions[0]
-            logger.info(f"📝 Sample: '{sample['text']}' @ {sample['start']:.2f}s ({len(sample['text'])} chars)")
+            logger.info(f"[SAMPLE] Sample: '{sample['text']}' @ {sample['start']:.2f}s ({len(sample['text'])} chars)")

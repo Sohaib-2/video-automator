@@ -32,7 +32,7 @@ class VideoListItem(QWidget):
         
         # Folder name with image count
         name_label = QLabel(
-            f"📁 {self.folder_name} "
+            f"{self.folder_name} "
             f"({self.num_images} image{'s' if self.num_images != 1 else ''})"
         )
         name_label.setFont(QFont('Arial', 11, QFont.Bold))
@@ -48,7 +48,7 @@ class VideoListItem(QWidget):
         layout.addWidget(self.progress_bar)
         
         # Status label
-        self.status_label = QLabel("⏳ Queued")
+        self.status_label = QLabel("[QUEUED]")
         self.status_label.setStyleSheet("color: #666; font-size: 10px;")
         layout.addWidget(self.status_label)
         
@@ -57,18 +57,18 @@ class VideoListItem(QWidget):
     def update_progress(self, value, status="Processing..."):
         """Update progress bar and status"""
         self.progress_bar.setValue(value)
-        self.status_label.setText(f"⚙️ {status}")
+        self.status_label.setText(f"[PROCESSING] {status}")
     
     def set_complete(self):
         """Mark item as complete"""
         self.progress_bar.setValue(100)
         self.progress_bar.setStyleSheet(Styles.PROGRESS_BAR_COMPLETE)
-        self.status_label.setText("✅ Complete!")
+        self.status_label.setText("[OK] Complete!")
         self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
     
     def set_error(self, error_msg="Error"):
         """Mark item as error"""
         self.progress_bar.setValue(0)
         self.progress_bar.setStyleSheet(Styles.PROGRESS_BAR_ERROR)
-        self.status_label.setText(f"❌ {error_msg}")
+        self.status_label.setText(f"[ERROR] {error_msg}")
         self.status_label.setStyleSheet("color: #f44336; font-weight: bold;")

@@ -96,10 +96,10 @@ class SubtitleStyleBuilder:
         # - Caption area: 80% of screen width
         #
         # This ensures:
-        # ✅ Text never touches edges
-        # ✅ Safe for all devices/TVs (overscan protection)
-        # ✅ Professional look (YouTube, Netflix standard)
-        # ✅ Natural wrapping at 2-3 lines for long captions
+        # - Text never touches edges
+        # - Safe for all devices/TVs (overscan protection)
+        # - Professional look (YouTube, Netflix standard)
+        # - Natural wrapping at 2-3 lines for long captions
         # ============================================================================
 
         SCREEN_WIDTH, SCREEN_HEIGHT = self.resolution
@@ -115,11 +115,11 @@ class SubtitleStyleBuilder:
         # Maximum caption width
         max_caption_width = SCREEN_WIDTH - margin_l - margin_r
         
-        logger.info(f"🎯 SAFE MARGINS:")
+        logger.info(f"[MARGINS] SAFE MARGINS:")
         logger.info(f"   Left:  {margin_l}px ({MINIMUM_SIDE_MARGIN_PERCENT*100:.0f}%)")
         logger.info(f"   Right: {margin_r}px ({MINIMUM_SIDE_MARGIN_PERCENT*100:.0f}%)")
         logger.info(f"   Caption area: {max_caption_width}px ({(max_caption_width/SCREEN_WIDTH)*100:.0f}%)")
-        logger.info(f"   ✅ Invisible boundary enforced - text will auto-wrap!")
+        logger.info(f"   Invisible boundary enforced - text will auto-wrap!")
         
         # Determine vertical alignment based on position
         if y_norm < 0.33:
@@ -174,7 +174,7 @@ class SubtitleStyleBuilder:
         logger.info(f"Wrapping: WrapStyle={wrap_style} (smart auto-wrap enabled)")
         logger.info(f"Colors: Text={text_color}, BG={bg_color}, HasBG={has_background}")
         logger.info(f"Border: Style={border_style}, Outline={outline_width}px, Shadow={shadow_depth}px")
-        logger.info("✅ HYBRID SYSTEM: Pre-split captions + FFmpeg auto-wrap safety net")
+        logger.info("[OK] HYBRID SYSTEM: Pre-split captions + FFmpeg auto-wrap safety net")
         
         return style
     
