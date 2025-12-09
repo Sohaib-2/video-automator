@@ -10,7 +10,7 @@ import re
 from typing import List, Dict
 from .motion_effects import MotionEffectBuilder
 from .subtitle_style import SubtitleStyleBuilder
-from .utils import check_gpu_available
+from .utils import check_gpu_available, get_video_duration
 from utils.resource_path import get_ffmpeg_path, get_font_path, get_resource_path
 
 logger = logging.getLogger(__name__)
@@ -225,8 +225,21 @@ class FFmpegCommandBuilder:
 
         # Process intro videos FIRST (crop to 16:9, mute)
         intro_streams = []
+        intro_durations = []
         if num_intro_videos > 0:
             width, height = self.config.resolution
+
+            # First, detect durations of all intro videos
+            for video_path in intro_videos:
+                try:
+                    video_dur = get_video_duration(video_path)
+                    intro_durations.append(video_dur)
+                    logger.info(f"📹 Intro video duration: {video_path} = {video_dur:.2f}s")
+                except Exception as e:
+                    logger.error(f"Failed to get duration for {video_path}: {e}")
+                    intro_durations.append(10.0)  # Default fallback
+
+            # Process each intro video
             for i in range(num_intro_videos):
                 input_index = intro_start_index + i
                 # Crop/scale intro video to 16:9 (same as image autofit)
@@ -241,19 +254,25 @@ class FFmpegCommandBuilder:
             else:
                 # Build chain of xfade transitions between intro videos
                 # For N intro videos, we need N-1 transitions
-                # We need to calculate duration of each intro video first
-                # For simplicity, we'll use a fixed transition at the end of each video
-                # Note: This assumes intro videos have their own natural durations
+                # offset = duration_of_first_video - transition_duration
 
                 for i in range(num_intro_videos - 1):
                     if i == 0:
                         # First transition: [intro0][intro1] -> [introx0]
                         input1 = f"[intro{i}]"
                         input2 = f"[intro{i+1}]"
+                        # Offset is when transition should start in the first video
+                        video_duration = intro_durations[i]
                     else:
                         # Subsequent transitions: [introx(i-1)][intro(i+1)] -> [introx(i)]
                         input1 = f"[introx{i-1}]"
                         input2 = f"[intro{i+1}]"
+                        # For concatenated streams, we need cumulative duration
+                        # But xfade works on the stream time, so we calculate relative to current video
+                        video_duration = intro_durations[i]
+
+                    # Calculate offset: transition starts at (duration - transition_duration)
+                    offset = max(0, video_duration - transition_duration)
 
                     # Determine output label
                     if i == num_intro_videos - 2:
@@ -263,10 +282,10 @@ class FFmpegCommandBuilder:
                         # Intermediate transitions
                         output = f"[introx{i}]"
 
-                    # Build xfade filter - transition happens at end of first video
-                    # offset=0 means transition starts at the beginning of overlap
-                    xfade_filter = f"{input1}{input2}xfade=transition=fade:duration={transition_duration}:offset=0{output}"
+                    # Build xfade filter with proper offset
+                    xfade_filter = f"{input1}{input2}xfade=transition=fade:duration={transition_duration}:offset={offset}{output}"
                     filter_parts.append(xfade_filter)
+                    logger.info(f"🎬 Intro transition {i}: offset={offset:.2f}s (video_dur={video_duration:.2f}s)")
 
                 intro_concat_output = "[vintro]"
                 logger.info(f"🎬 Applied {num_intro_videos-1} xfade transitions between intro videos ({transition_duration}s each)")
@@ -323,10 +342,13 @@ class FFmpegCommandBuilder:
         # Apply xfade transition between intro videos and image slideshow
         if num_intro_videos > 0:
             # Smooth transition from last intro video to first image
-            # offset=0 means transition starts at the beginning of overlap
-            xfade_filter = f"{intro_concat_output}[vimages]xfade=transition=fade:duration={transition_duration}:offset=0[vconcat]"
+            # Calculate offset based on last intro video's duration
+            last_intro_duration = intro_durations[-1] if intro_durations else 10.0
+            offset_to_images = max(0, last_intro_duration - transition_duration)
+
+            xfade_filter = f"{intro_concat_output}[vimages]xfade=transition=fade:duration={transition_duration}:offset={offset_to_images}[vconcat]"
             filter_parts.append(xfade_filter)
-            logger.info(f"🎬 Applied xfade transition between intro videos and images ({transition_duration}s)")
+            logger.info(f"🎬 Applied xfade transition between intro videos and images (offset={offset_to_images:.2f}s, duration={transition_duration}s)")
         else:
             # No intro videos, just rename vimages to vconcat
             filter_parts.append(f"[vimages]copy[vconcat]")
