@@ -28,7 +28,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("🎬 Video Automator - Batch Video Editor")
+        self.setWindowTitle("Video Automator - Batch Video Editor")
         self.setGeometry(100, 100, 1000, 750)
         
         # Enable drag and drop
@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
     def show_first_time_setup(self):
         """Show first-time setup wizard"""
         msg = QMessageBox()
-        msg.setWindowTitle("🎉 Welcome to Video Automator!")
+        msg.setWindowTitle("Welcome to Video Automator!")
         msg.setIcon(QMessageBox.Information)
         msg.setText(
             "<h3>Welcome to Video Automator!</h3>"
@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
         if not check_ffmpeg_installed():
             QMessageBox.warning(
                 self,
-                "⚠️ FFmpeg Not Found",
+                "FFmpeg Not Found",
                 "FFmpeg is not installed or not in PATH.\n\n"
                 "Please install FFmpeg to use this application.\n"
                 "Visit: https://ffmpeg.org/download.html"
@@ -98,9 +98,9 @@ class MainWindow(QMainWindow):
         
         gpu_available = check_gpu_available()
         if gpu_available:
-            print("✅ NVIDIA GPU detected - will use hardware acceleration")
+            print("NVIDIA GPU detected - will use hardware acceleration")
         else:
-            print("ℹ️  No NVIDIA GPU detected - will use CPU encoding")
+            print("No NVIDIA GPU detected - will use CPU encoding")
     
     def load_settings(self):
         """Load settings from config file"""
@@ -188,7 +188,7 @@ class MainWindow(QMainWindow):
         # Header
         header_layout = QHBoxLayout()
         
-        title = QLabel("🎬 Video Automator")
+        title = QLabel("Video Automator")
         title.setFont(QFont('Arial', 28, QFont.Bold))
         title.setStyleSheet("color: #1976D2;")
         header_layout.addWidget(title)
@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
         header_layout.addStretch()
         
         # Settings button
-        settings_btn = QPushButton("⚙️ Settings")
+        settings_btn = QPushButton("Settings")
         settings_btn.setFixedSize(140, 45)
         settings_btn.setStyleSheet(Styles.BUTTON_SECONDARY)
         settings_btn.clicked.connect(self.open_settings)
@@ -211,13 +211,13 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(line)
         
         # Add folders section
-        add_section = QLabel("📂 Add Video Folders")
+        add_section = QLabel("Add Video Folders")
         add_section.setFont(QFont('Arial', 16, QFont.Bold))
         add_section.setStyleSheet("color: #1976D2;")
         main_layout.addWidget(add_section)
         
         info_label = QLabel(
-            "💡 Drag & drop folders here, or click button below • "
+            "Drag & drop folders here, or click button below • "
             "Each folder needs: voiceover audio + at least 1 image"
         )
         info_label.setStyleSheet("color: #666; font-style: italic; font-size: 12px;")
@@ -225,14 +225,14 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(info_label)
         
         # Add folder button
-        add_folder_btn = QPushButton("➕ Add Folders (or drag & drop)")
+        add_folder_btn = QPushButton("Add Folders (or drag & drop)")
         add_folder_btn.setFixedHeight(70)
         add_folder_btn.setStyleSheet(Styles.BUTTON_ADD_FOLDER)
         add_folder_btn.clicked.connect(self.add_folders)
         main_layout.addWidget(add_folder_btn)
         
         # Queue section
-        queue_label = QLabel("📋 Video Queue")
+        queue_label = QLabel("Video Queue")
         queue_label.setFont(QFont('Arial', 16, QFont.Bold))
         queue_label.setStyleSheet("color: #1976D2;")
         main_layout.addWidget(queue_label)
@@ -244,13 +244,13 @@ class MainWindow(QMainWindow):
         # Control buttons
         button_layout = QHBoxLayout()
         
-        self.start_btn = QPushButton("▶️ Start Batch Render")
+        self.start_btn = QPushButton("Start Batch Render")
         self.start_btn.setFixedHeight(55)
         self.start_btn.setEnabled(False)
         self.start_btn.setStyleSheet(Styles.BUTTON_WARNING)
         self.start_btn.clicked.connect(self.start_rendering)
         
-        clear_btn = QPushButton("🗑️ Clear Queue")
+        clear_btn = QPushButton("Clear Queue")
         clear_btn.setFixedHeight(55)
         clear_btn.setStyleSheet(Styles.BUTTON_DANGER)
         clear_btn.clicked.connect(self.clear_queue)
@@ -261,7 +261,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(button_layout)
         
         # Status bar
-        self.status_label = QLabel("✨ Ready to automate your videos!")
+        self.status_label = QLabel("Ready to automate your videos!")
         self.status_label.setStyleSheet(
             "color: #666; padding: 10px; font-size: 12px; "
             "background-color: #f5f5f5; border-radius: 5px;"
@@ -296,7 +296,7 @@ class MainWindow(QMainWindow):
                     return
             else:
                 QMessageBox.information(
-                    self, "💡 Tip",
+                    self, "Tip",
                     "Add a video folder first to access full preview settings!"
                 )
                 return
@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             self.settings = dialog.get_settings()
             self.save_settings()
-            self.status_label.setText("✅ Settings saved successfully!")
+            self.status_label.setText("Settings saved successfully!")
     
     def open_enhanced_settings(self, sample_folder):
         """Open enhanced settings with sample folder"""
@@ -312,13 +312,13 @@ class MainWindow(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             self.settings = dialog.get_settings()
             self.save_settings()
-            self.status_label.setText("✅ Settings configured!")
+            self.status_label.setText("Settings configured!")
     
     def add_folders(self):
         """Add video folders to queue"""
         reply = QMessageBox.question(
             self,
-            "📂 Add Folders",
+            "Add Folders",
             "<b>How would you like to add folders?</b><br><br>"
             "• <b>Individual:</b> Select one video project folder<br>"
             "• <b>Batch Scan:</b> Select a parent folder, app will scan for all valid video projects inside",
@@ -342,7 +342,7 @@ class MainWindow(QMainWindow):
         """Scan parent folder for valid video projects"""
         from PyQt5.QtWidgets import QApplication
         
-        self.status_label.setText(f"🔍 Scanning {parent_folder}...")
+        self.status_label.setText(f"Scanning {parent_folder}...")
         QApplication.processEvents()
         
         found_folders = []
@@ -363,27 +363,27 @@ class MainWindow(QMainWindow):
             for folder in found_folders:
                 self.add_folder_to_queue(folder, silent=True)
             
-            summary = f"✅ Added {len(found_folders)} video project(s)\n\n"
-            
+            summary = f"Added {len(found_folders)} video project(s)\n\n"
+
             if skipped_folders:
-                summary += f"⚠️ Skipped {len(skipped_folders)} folder(s):\n"
+                summary += f"Skipped {len(skipped_folders)} folder(s):\n"
                 for name, reason in skipped_folders[:5]:
                     summary += f"  • {name}: {reason}\n"
                 if len(skipped_folders) > 5:
                     summary += f"  ... and {len(skipped_folders) - 5} more"
             
-            QMessageBox.information(self, "✅ Scan Complete", summary)
-            self.status_label.setText(f"✅ Added {len(found_folders)} videos from scan")
+            QMessageBox.information(self, "Scan Complete", summary)
+            self.status_label.setText(f"Added {len(found_folders)} videos from scan")
         else:
             QMessageBox.warning(
                 self,
-                "❌ No Valid Projects Found",
+                "No Valid Projects Found",
                 f"No valid video projects found in:\n{parent_folder}\n\n"
                 "Each video project folder must contain:\n"
                 "• Audio file (voiceover)\n"
                 "• At least 1 image file"
             )
-            self.status_label.setText("❌ No valid projects found")
+            self.status_label.setText("No valid projects found")
     
     def add_folder_to_queue(self, folder_path, silent=False):
         """Add a folder to the video queue"""
@@ -396,7 +396,7 @@ class MainWindow(QMainWindow):
             if not silent:
                 QMessageBox.warning(
                     self,
-                    "❌ Invalid Folder",
+                    "Invalid Folder",
                     f"Folder '{folder_name}' is missing required files:\n\n{error_msg}\n\n"
                     "Each folder must contain:\n"
                     "• Voiceover audio (.mp3, .wav, etc.)\n"
@@ -425,7 +425,7 @@ class MainWindow(QMainWindow):
         
         if not silent:
             self.status_label.setText(
-                f"✅ Added: {folder_name} ({num_images} image(s)) • "
+                f"Added: {folder_name} ({num_images} image(s)) • "
                 f"Total: {len(self.video_queue)} video(s)"
             )
     
@@ -445,7 +445,7 @@ class MainWindow(QMainWindow):
             self.queue_list.clear()
             self.video_queue = []
             self.start_btn.setEnabled(False)
-            self.status_label.setText("🗑️ Queue cleared")
+            self.status_label.setText("Queue cleared")
     
     def start_rendering(self):
         """Start batch rendering process"""
@@ -454,7 +454,7 @@ class MainWindow(QMainWindow):
         
         workers, ok = QInputDialog.getInt(
             self,
-            "⚙️ Parallel Rendering",
+            "Parallel Rendering",
             "Number of simultaneous renders:\n(More = faster, but uses more resources)",
             value=2,
             min=1,
@@ -465,7 +465,7 @@ class MainWindow(QMainWindow):
             return
         
         self.status_label.setText(
-            f"🚀 Starting batch render: {len(self.video_queue)} videos "
+            f"Starting batch render: {len(self.video_queue)} videos "
             f"with {workers} parallel worker(s)..."
         )
         self.start_btn.setEnabled(False)
@@ -497,10 +497,10 @@ class MainWindow(QMainWindow):
             if video['path'] == folder_path:
                 if success:
                     video['widget'].set_complete()
-                    self.status_label.setText(f"✅ Completed: {video['name']} → {output_path}")
+                    self.status_label.setText(f"Completed: {video['name']} → {output_path}")
                 else:
                     video['widget'].set_error("Rendering failed")
-                    self.status_label.setText(f"❌ Failed: {video['name']}")
+                    self.status_label.setText(f"Failed: {video['name']}")
                 break
     
     def on_all_complete(self):
@@ -512,15 +512,15 @@ class MainWindow(QMainWindow):
         
         QMessageBox.information(
             self,
-            "🎉 Rendering Complete!",
+            "Rendering Complete!",
             f"<h3>All videos have been rendered!</h3>"
             f"<p>Videos saved in their project folders:</p>"
             f"<pre>{output_list}</pre>"
-            f"<p><b>You can now upload your videos to YouTube! 🚀</b></p>"
+            f"<p><b>You can now upload your videos to YouTube!</b></p>"
         )
         
         self.status_label.setText(
-            f"🎉 All {len(self.video_queue)} video(s) complete! "
+            f"All {len(self.video_queue)} video(s) complete! "
             "Check your project folders for MP4 files."
         )
     
@@ -595,16 +595,16 @@ class MainWindow(QMainWindow):
                     else:
                         skipped.append((os.path.basename(folder), msg))
                 
-                summary = f"✅ Added {added} folder(s)\n\n"
+                summary = f"Added {added} folder(s)\n\n"
                 if skipped:
-                    summary += f"⚠️ Skipped {len(skipped)} folder(s):\n"
+                    summary += f"Skipped {len(skipped)} folder(s):\n"
                     for name, reason in skipped[:5]:
                         summary += f"  • {name}: {reason}\n"
                     if len(skipped) > 5:
                         summary += f"  ... and {len(skipped) - 5} more"
                 
                 QMessageBox.information(self, "Drop Complete", summary)
-                self.status_label.setText(f"✅ Added {added} videos via drag & drop")
+                self.status_label.setText(f"Added {added} videos via drag & drop")
                 
             elif reply == QMessageBox.No:
                 total_added = 0
@@ -616,7 +616,7 @@ class MainWindow(QMainWindow):
                     total_added += (after - before)
                 
                 self.status_label.setText(
-                    f"✅ Added {total_added} videos from {len(folders)} parent folder(s)"
+                    f"Added {total_added} videos from {len(folders)} parent folder(s)"
                 )
 
         event.acceptProposedAction()
