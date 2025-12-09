@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
             'outline_color': '#000000',
             'outline_width': 3,
             'shadow_depth': 2,
+            'italic_text': False,
             'position': 'Bottom Center',
             'motion_effects': ['Static'],  # Changed to list
             'crop_settings': None,
