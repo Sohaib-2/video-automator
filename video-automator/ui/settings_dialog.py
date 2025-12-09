@@ -115,7 +115,7 @@ class EnhancedSettingsDialog(QDialog):
         left_panel = QVBoxLayout()
         left_panel.setSpacing(10)
         
-        preview_label = QLabel("📺 Live Preview - 16:9 Video Output")
+        preview_label = QLabel("Live Preview - 16:9 Video Output")
         preview_label.setFont(QFont('Arial', 14, QFont.Bold))
         preview_label.setStyleSheet("color: #1976D2; padding: 5px;")
         left_panel.addWidget(preview_label)
@@ -136,7 +136,7 @@ class EnhancedSettingsDialog(QDialog):
     
     def _create_zoom_controls(self):
         """Create zoom control group"""
-        zoom_group = QGroupBox("🔍 Zoom & Position Controls")
+        zoom_group = QGroupBox("Zoom & Position Controls")
         zoom_group.setStyleSheet(Styles.SETTINGS_GROUPBOX)
         zoom_layout = QVBoxLayout()
         
@@ -144,7 +144,7 @@ class EnhancedSettingsDialog(QDialog):
         zoom_buttons_layout = QHBoxLayout()
         zoom_buttons_layout.addWidget(QLabel("Zoom:"))
         
-        self.zoom_out_btn = QPushButton("➖")
+        self.zoom_out_btn = QPushButton("-")
         self.zoom_out_btn.setFixedSize(50, 50)
         self.zoom_out_btn.setStyleSheet(Styles.BUTTON_ZOOM_OUT)
         self.zoom_out_btn.clicked.connect(self.on_zoom_out)
@@ -156,7 +156,7 @@ class EnhancedSettingsDialog(QDialog):
         self.zoom_label.setStyleSheet("font-weight: bold; font-size: 18px; color: #1976D2;")
         zoom_buttons_layout.addWidget(self.zoom_label)
         
-        self.zoom_in_btn = QPushButton("➕")
+        self.zoom_in_btn = QPushButton("+")
         self.zoom_in_btn.setFixedSize(50, 50)
         self.zoom_in_btn.setStyleSheet(Styles.BUTTON_ZOOM_IN)
         self.zoom_in_btn.clicked.connect(self.on_zoom_in)
@@ -167,7 +167,7 @@ class EnhancedSettingsDialog(QDialog):
         
         # Instructions
         instructions = QLabel(
-            "💡 <b>How to use:</b><br>"
+            "<b>How to use:</b><br>"
             "• Drag the <b>image</b> to reposition it<br>"
             "• Use <b>+/- buttons</b> or <b>mouse wheel</b> to zoom<br>"
             "• Drag the <b>caption</b> to change its position<br>"
@@ -186,7 +186,7 @@ class EnhancedSettingsDialog(QDialog):
     
     def _create_motion_effects(self):
         """Create motion effects section with checkboxes and intensity sliders"""
-        effects_group = QGroupBox("🎬 Motion Effects")
+        effects_group = QGroupBox("Motion Effects")
         effects_group.setStyleSheet(Styles.SETTINGS_GROUPBOX)
         effects_layout = QVBoxLayout()
         
@@ -334,7 +334,7 @@ class EnhancedSettingsDialog(QDialog):
 
         # Info label
         info_label = QLabel(
-            "💡 You can combine multiple effects!\n"
+            "You can combine multiple effects!\n"
             "   Adjust intensity sliders to control effect strength."
         )
         info_label.setStyleSheet(
@@ -399,7 +399,7 @@ class EnhancedSettingsDialog(QDialog):
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
         
-        settings_title = QLabel("⚙️ Caption Settings")
+        settings_title = QLabel("Caption Settings")
         settings_title.setFont(QFont('Arial', 14, QFont.Bold))
         settings_title.setStyleSheet("color: #1976D2; padding: 5px;")
         right_panel.addWidget(settings_title)
@@ -589,7 +589,7 @@ class EnhancedSettingsDialog(QDialog):
     
     def _create_preview_text_input(self):
         """Create preview text input group"""
-        sample_group = QGroupBox("📝 Preview Text")
+        sample_group = QGroupBox("Preview Text")
         sample_layout = QVBoxLayout()
         preview_text = self.settings.get('preview_text', 'Sample Caption Text')
         self.sample_text_input = QLineEdit(preview_text)
@@ -603,11 +603,11 @@ class EnhancedSettingsDialog(QDialog):
         """Create action buttons"""
         button_layout = QHBoxLayout()
         
-        save_btn = QPushButton("✅ Save Settings")
+        save_btn = QPushButton("Save Settings")
         save_btn.clicked.connect(self.save_and_close)
         save_btn.setStyleSheet(Styles.BUTTON_SAVE)
         
-        cancel_btn = QPushButton("❌ Cancel")
+        cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
         cancel_btn.setStyleSheet(Styles.BUTTON_CANCEL)
         
@@ -807,7 +807,7 @@ class EnhancedSettingsDialog(QDialog):
             if crop_region['x'] < 0 or crop_region['y'] < 0:
                 reply = QMessageBox.question(
                     self,
-                    "⚠️ Invalid Crop Position",
+                    "Invalid Crop Position",
                     "The image position resulted in an invalid crop.\n\n"
                     "The crop has been adjusted to valid boundaries.\n"
                     f"Adjusted crop: {crop_region['width']}x{crop_region['height']} "
@@ -870,15 +870,15 @@ class EnhancedSettingsDialog(QDialog):
 
         QMessageBox.information(
             self,
-            "✅ Settings Saved",
+            "Settings Saved",
             f"Your settings have been saved successfully!\n\n"
-            f"📺 Video Quality: {resolution_display}\n"
-            f"📝 Font: {self.settings['font']} ({self.settings['font_size']}px)\n"
-            f"🎨 Caption Position: ({caption_pos['x']:.2f}, {caption_pos['y']:.2f})\n"
-            f"🖼️ Crop: {crop_region['width']}x{crop_region['height']} "
+            f"Video Quality: {resolution_display}\n"
+            f"Font: {self.settings['font']} ({self.settings['font_size']}px)\n"
+            f"Caption Position: ({caption_pos['x']:.2f}, {caption_pos['y']:.2f})\n"
+            f"Crop: {crop_region['width']}x{crop_region['height']} "
             f"at ({crop_region['x']},{crop_region['y']})\n"
-            f"🎬 Motion Effects: {effects_str}\n"
-            f"✏️ Outline: {'Enabled' if self.settings['has_outline'] else 'Disabled'}\n\n"
+            f"Motion Effects: {effects_str}\n"
+            f"Outline: {'Enabled' if self.settings['has_outline'] else 'Disabled'}\n\n"
             "These settings will be used for all videos."
         )
         
