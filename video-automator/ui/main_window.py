@@ -386,13 +386,30 @@ class MainWindow(QMainWindow):
             )
             self.status_label.setText("No valid projects found")
     
+    def _sort_and_refresh_queue(self):
+        """Sort queue alphabetically and refresh the UI display"""
+        # Sort the queue by folder name (case-insensitive)
+        self.video_queue.sort(key=lambda x: x['name'].lower())
+
+        # Clear the QListWidget
+        self.queue_list.clear()
+
+        # Re-add all items in sorted order
+        for video in self.video_queue:
+            item = QListWidgetItem(self.queue_list)
+            item.setSizeHint(video['widget'].sizeHint())
+            self.queue_list.addItem(item)
+            self.queue_list.setItemWidget(item, video['widget'])
+            # Update the item reference
+            video['item'] = item
+
     def add_folder_to_queue(self, folder_path, silent=False):
         """Add a folder to the video queue"""
         folder_name = os.path.basename(folder_path)
-        
+
         processor = VideoProcessor(self.settings)
         is_valid, error_msg = processor.validate_folder(folder_path)
-        
+
         if not is_valid:
             if not silent:
                 QMessageBox.warning(
@@ -404,26 +421,30 @@ class MainWindow(QMainWindow):
                     "• At least 1 image (.png, .jpg, etc.)"
                 )
             return
-        
+
         detected = processor.detect_files(folder_path)
         num_images = len(detected['images'])
-        
+
         item_widget = VideoListItem(folder_name, num_images)
         item = QListWidgetItem(self.queue_list)
         item.setSizeHint(item_widget.sizeHint())
-        
+
+        # Initially add to list (will be sorted later)
         self.queue_list.addItem(item)
         self.queue_list.setItemWidget(item, item_widget)
-        
+
         self.video_queue.append({
             'path': folder_path,
             'name': folder_name,
             'item': item,
             'widget': item_widget
         })
-        
+
+        # Sort the queue alphabetically after adding
+        self._sort_and_refresh_queue()
+
         self.start_btn.setEnabled(True)
-        
+
         if not silent:
             self.status_label.setText(
                 f"Added: {folder_name} ({num_images} image(s)) • "
